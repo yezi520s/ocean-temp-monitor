@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>海洋温度异常预警监测平台</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -448,11 +451,13 @@ body {
 </div>
 
 <script>
+// APP_VERSION: 2026.11.01-r4
 // ============================================================
 // Canvas 水下世界引擎 — 光柱 / 鱼群 / 浮游生物 / 海底光斑
 // ============================================================
 ;(function() {
   const c = document.getElementById('oceanCanvas');
+  console.log('🌊 Ocean Monitor v2026.11.01-r4 ready');
   const ctx = c.getContext('2d');
   let W, H, midX, midY;
   let tick = 0, mouseX = -400, mouseY = -400;
