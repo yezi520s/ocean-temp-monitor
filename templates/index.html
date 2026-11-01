@@ -890,39 +890,65 @@ async function refreshAll() {
   const orig = btn.innerHTML;
   btn.innerHTML = '<span style="animation:spin 0.8s linear infinite">⟳</span> 启动中...';
   btn.style.pointerEvents = 'none';
+  
+  // 1. 启动后台刷新
+  let startData;
   try {
-    // 1. 启动后台刷新
     const startResp = await fetch('/api/refresh', { method: 'POST' });
-    const startData = await startResp.json();
-    if (startData.status === 'running') { showToast('刷新任务已在执行中，请稍候', 'info'); }
-    // 2. 轮询等待完成
-    let attempts = 0;
-    btn.innerHTML = '<span style="animation:spin 0.8s linear infinite">⟳</span> 拉取Open-Meteo数据中...';
-    while (attempts < 60) {
-      await sleep(2000);
+    startData = await startResp.json();
+  } catch (e) {
+    showToast('无法连接服务器，请稍后重试', 'error');
+    btn.innerHTML = orig; btn.style.pointerEvents = '';
+    return;
+  }
+  
+  if (startData.status === 'running') {
+    showToast('刷新任务已在执行中，请稍候', 'info');
+  }
+  
+  // 2. 轮询等待完成
+  let attempts = 0;
+  let lastError = null;
+  btn.innerHTML = '<span style="animation:spin 0.8s linear infinite">⟳</span> 拉取Open-Meteo数据中...';
+  
+  while (attempts < 60) {
+    attempts++;
+    await sleep(2000);
+    try {
       const statusResp = await fetch('/api/refresh_status');
       const statusData = await statusResp.json();
+      lastError = null;
+      
       if (!statusData.running) {
         if (statusData.error) {
           showToast(`刷新出错: ${statusData.error}`, 'error');
           break;
         }
         const results = statusData.results;
-        if (!results) { showToast('刷新完成但无结果', 'warning'); break; }
+        if (!results) { showToast('刷新完成，无新数据', 'warning'); break; }
         const ok = results.filter(x => x.success).length;
         showToast(`数据同步完成 · ${ok}/${results.length} 个站点更新成功`, ok === results.length ? 'success' : 'error');
         await loadOverview();
         if (stationsData.length > 0) loadStationChart(currentStationId);
         break;
       }
-      attempts++;
+      // still running, update button text
+      btn.innerHTML = '<span style="animation:spin 0.8s linear infinite">⟳</span> 拉取中... (' + attempts + '/60)';
+    } catch (e) {
+      lastError = e;
+      btn.innerHTML = '<span style="animation:spin 0.8s linear infinite">⟳</span> 重试中... (' + attempts + '/60)';
     }
-    if (attempts >= 60) showToast('刷新超时，请重试', 'warning');
-  } catch(e) {
-    showToast('数据同步失败，请检查网络连接', 'error');
-  } finally {
-    btn.innerHTML = orig; btn.style.pointerEvents = '';
   }
+  
+  if (attempts >= 60) {
+    if (lastError) {
+      showToast('服务器响应超时（Render 冷启动中），后台仍在刷新，请稍后点同步按钮重试', 'warning');
+    } else {
+      showToast('刷新超时，请重试', 'warning');
+    }
+  }
+  
+  btn.innerHTML = orig; btn.style.pointerEvents = '';
 }
 
 async function runAnalysis() {
