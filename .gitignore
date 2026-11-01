@@ -1,0 +1,9 @@
+ocean_data.db
+__pycache__/
+*.pyc
+.env
+鍚姩鏈嶅姟.bat
+鍚姩鍏綉.bat
+1-Flask.bat
+2-SSH.bat
+start-server.ps1
