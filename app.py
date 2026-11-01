@@ -27,6 +27,7 @@ def no_cache(response):
 
 # 刷新任务状态
 _refresh_status = {"running": False, "results": None, "time": None, "error": None}
+_refresh_lock = threading.Lock()
 
 # ============================================================
 # 监测站点配置 - 中国沿海关键海域
@@ -230,22 +231,25 @@ def index():
 
 @app.route('/api/refresh', methods=['POST'])
 def refresh_data():
-    """刷新所有站点数据 - 后台异步执行"""
-    global _refresh_status
-    if _refresh_status["running"]:
-        return jsonify({"status": "running", "message": "刷新任务已在执行中"})
+    """刷新所有站点数据 - 后台异步执行（单 worker 安全）"""
+    global _refresh_status, _refresh_lock
+    with _refresh_lock:
+        if _refresh_status["running"]:
+            return jsonify({"status": "running", "message": "刷新任务已在执行中"})
+        _refresh_status = {"running": True, "results": None, "time": None, "error": None}
     
     def _bg_refresh():
-        global _refresh_status
-        _refresh_status = {"running": True, "results": None, "time": None, "error": None}
+        global _refresh_status, _refresh_lock
         try:
             results = []
             for station in MONITOR_STATIONS:
                 ok = cache_sst_data(station["id"], station["name"], station["lat"], station["lon"])
                 results.append({"station": station["name"], "success": ok})
-            _refresh_status = {"running": False, "results": results, "time": datetime.now().isoformat(), "error": None}
+            with _refresh_lock:
+                _refresh_status = {"running": False, "results": results, "time": datetime.now().isoformat(), "error": None}
         except Exception as e:
-            _refresh_status = {"running": False, "results": None, "time": datetime.now().isoformat(), "error": str(e)}
+            with _refresh_lock:
+                _refresh_status = {"running": False, "results": None, "time": datetime.now().isoformat(), "error": str(e)}
     
     threading.Thread(target=_bg_refresh, daemon=True).start()
     return jsonify({"status": "started", "message": "后台刷新已启动"})
@@ -253,8 +257,10 @@ def refresh_data():
 @app.route('/api/refresh_status', methods=['GET'])
 def refresh_status():
     """查询刷新任务状态"""
-    global _refresh_status
-    return jsonify(_refresh_status)
+    global _refresh_status, _refresh_lock
+    with _refresh_lock:
+        s = dict(_refresh_status)
+    return jsonify(s)
 
 @app.route('/api/stations', methods=['GET'])
 def get_stations():
