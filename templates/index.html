@@ -6,12 +6,12 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>海洋温度异常预警监测平台</title>
+<title>娴锋磱娓╁害寮傚父棰勮鐩戞祴骞冲彴</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 <style>
-/* ====== 全局重置 ====== */
+/* ====== 鍏ㄥ眬閲嶇疆 ====== */
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 :root {
   --bg-deep: #020b1a;
@@ -42,13 +42,13 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* ====== Canvas 水下世界背景 ====== */
+/* ====== Canvas 姘翠笅涓栫晫鑳屾櫙 ====== */
 #oceanCanvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
 
-/* ====== 主容器层级 ====== */
+/* ====== 涓诲鍣ㄥ眰绾?====== */
 .app { position: relative; z-index: 1; }
 
-/* ====== 顶部栏 ====== */
+/* ====== 椤堕儴鏍?====== */
 .header {
   position: relative; z-index: 10;
   padding: 18px 32px;
@@ -119,7 +119,7 @@ body {
 }
 .btn:active { transform: scale(0.96); }
 
-/* ====== 主网格 ====== */
+/* ====== 涓荤綉鏍?====== */
 .main-grid {
   display: grid;
   grid-template-columns: 1fr 340px;
@@ -127,7 +127,7 @@ body {
   height: calc(100vh - 94px);
 }
 
-/* ====== 玻璃拟态面板 ====== */
+/* ====== 鐜荤拑鎷熸€侀潰鏉?====== */
 .glass {
   background: var(--bg-panel);
   backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
@@ -138,7 +138,7 @@ body {
 }
 .glass:hover { border-color: rgba(64, 158, 255, 0.25); }
 
-/* ====== 统计卡片 ====== */
+/* ====== 缁熻鍗＄墖 ====== */
 .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 16px; }
 .stat-card {
   position: relative; padding: 20px; overflow: hidden; cursor: default;
@@ -162,7 +162,7 @@ body {
 .accent-red { background: rgba(255,71,87,0.5); }
 .accent-blue { background: rgba(59,158,255,0.5); }
 
-/* 数字跳动动画 */
+/* 鏁板瓧璺冲姩鍔ㄧ敾 */
 @keyframes countPop {
   0% { transform: scale(1); }
   50% { transform: scale(1.08); }
@@ -170,7 +170,7 @@ body {
 }
 .num-animate { animation: countPop 0.4s ease-out; }
 
-/* ====== 地图容器 ====== */
+/* ====== 鍦板浘瀹瑰櫒 ====== */
 .map-wrap {
   flex: 1; overflow: hidden; position: relative;
   border-radius: var(--radius-lg);
@@ -181,10 +181,10 @@ body {
 }
 #map { width: 100%; height: 100%; }
 .leaflet-container { background: #051030 !important; }
-/* 暗色地图滤镜 */
+/* 鏆楄壊鍦板浘婊ら暅 */
 .leaflet-container { background: #051030 !important; }
 
-/* 自定义地图标记 */
+/* 鑷畾涔夊湴鍥炬爣璁?*/
 .marker-pin {
   width: 44px; height: 44px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
@@ -202,10 +202,10 @@ body {
   100% { inset: -20px; opacity: 0; }
 }
 
-/* ====== 右侧面板 ====== */
+/* ====== 鍙充晶闈㈡澘 ====== */
 .side-panel { display: flex; flex-direction: column; gap: 16px; }
 
-/* 告警面板 */
+/* 鍛婅闈㈡澘 */
 .alert-section { padding: 20px; flex: 1; overflow-y: auto; }
 .alert-section h3 {
   font-size: 15px; font-weight: 700; margin-bottom: 16px;
@@ -245,7 +245,7 @@ body {
   to { opacity: 1; transform: translateX(0); }
 }
 
-/* 站点列表 */
+/* 绔欑偣鍒楄〃 */
 .station-section { padding: 20px; }
 .station-section h3 { font-size: 15px; font-weight: 700; margin-bottom: 14px; color: var(--text-primary); }
 .station-row {
@@ -270,7 +270,7 @@ body {
 .st-info .st-region { font-size: 10px; color: var(--text-muted); }
 .st-temp { font-size: 16px; font-weight: 700; text-align: right; }
 
-/* ====== 底部图表 ====== */
+/* ====== 搴曢儴鍥捐〃 ====== */
 .charts-row {
   display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
   margin: 0 20px 20px;
@@ -284,7 +284,7 @@ body {
 }
 .chart-box .chart-sub { font-size: 11px; color: var(--text-muted); }
 
-/* ====== 状态栏 ====== */
+/* ====== 鐘舵€佹爮 ====== */
 .footer-bar {
   display: flex; justify-content: space-between; align-items: center;
   padding: 8px 24px; font-size: 11px; color: var(--text-muted);
@@ -305,7 +305,7 @@ body {
 }
 .status-ind.green { background: rgba(0,227,150,0.1); color: var(--green); }
 
-/* ====== Toast 通知 ====== */
+/* ====== Toast 閫氱煡 ====== */
 .toast {
   position: fixed; top: 24px; right: 24px; z-index: 9999;
   padding: 14px 24px; border-radius: 12px; font-size: 14px; font-weight: 500;
@@ -319,13 +319,13 @@ body {
 @keyframes toastIn { from { opacity: 0; transform: translateX(60px); } to { opacity: 1; transform: translateX(0); } }
 @keyframes toastOut { to { opacity: 0; transform: translateY(-20px); } }
 
-/* ====== 滚动条 ====== */
+/* ====== 婊氬姩鏉?====== */
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.12); }
 
-/* ====== 响应式 ====== */
+/* ====== 鍝嶅簲寮?====== */
 @media (max-width: 1200px) {
   .main-grid { grid-template-columns: 1fr; }
   .stat-row { grid-template-columns: repeat(2, 1fr); }
@@ -336,18 +336,18 @@ body {
 </head>
 <body>
 
-<!-- 水下世界背景 -->
+<!-- 姘翠笅涓栫晫鑳屾櫙 -->
 <canvas id="oceanCanvas"></canvas>
 
-<!-- 主应用 -->
+<!-- 涓诲簲鐢?-->
 <div class="app">
 
-  <!-- 顶部导航 -->
+  <!-- 椤堕儴瀵艰埅 -->
   <header class="header">
     <div class="header-brand">
-      <div class="header-icon">🌊</div>
+      <div class="header-icon">馃寠</div>
       <div class="header-title">
-        <h1>海洋温度异常预警监测平台</h1>
+        <h1>娴锋磱娓╁害寮傚父棰勮鐩戞祴骞冲彴</h1>
         <span>Ocean Temperature Anomaly Detection System</span>
       </div>
     </div>
@@ -355,97 +355,97 @@ body {
       <div class="clock"><span class="dot"></span><span id="clockText">--</span></div>
       <button class="btn btn-secondary" onclick="refreshAll()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M3.5 15.5a9 9 0 1 0 3.2-10.3L1 10"/></svg>
-        同步最新数据
+        鍚屾鏈€鏂版暟鎹?
       </button>
       <button class="btn btn-amber" onclick="runAnalysis()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/><path d="M12 3v3"/><path d="M4 2l4 8h8l4-8"/></svg>
-        执行智能分析
+        鎵ц鏅鸿兘鍒嗘瀽
       </button>
     </div>
   </header>
 
-  <!-- 主内容区 -->
+  <!-- 涓诲唴瀹瑰尯 -->
   <div class="main-grid">
-    <!-- 左侧 -->
+    <!-- 宸︿晶 -->
     <div style="display:flex;flex-direction:column;gap:16px;">
-      <!-- 四张统计卡片 -->
+      <!-- 鍥涘紶缁熻鍗＄墖 -->
       <div class="stat-row">
         <div class="stat-card glass">
-          <span class="stat-icon">📡</span>
-          <div class="stat-label">监测站点</div>
+          <span class="stat-icon">馃摗</span>
+          <div class="stat-label">鐩戞祴绔欑偣</div>
           <div class="stat-value" style="color:var(--blue-light)" id="cardStations">8</div>
-          <div class="stat-footnote">覆盖中国近海全海域</div>
+          <div class="stat-footnote">瑕嗙洊涓浗杩戞捣鍏ㄦ捣鍩?/div>
           <div class="stat-accent accent-blue"></div>
         </div>
         <div class="stat-card glass">
-          <span class="stat-icon">🌡️</span>
-          <div class="stat-label">近海最高温度</div>
+          <span class="stat-icon">馃尅锔?/span>
+          <div class="stat-label">杩戞捣鏈€楂樻俯搴?/div>
           <div class="stat-value" id="cardMaxTemp" style="color:var(--orange)">--</div>
-          <div class="stat-footnote" id="cardMaxStation">加载中...</div>
+          <div class="stat-footnote" id="cardMaxStation">鍔犺浇涓?..</div>
           <div class="stat-accent accent-orange"></div>
         </div>
         <div class="stat-card glass">
-          <span class="stat-icon">🔔</span>
-          <div class="stat-label">活跃预警</div>
+          <span class="stat-icon">馃敂</span>
+          <div class="stat-label">娲昏穬棰勮</div>
           <div class="stat-value" id="cardAlerts" style="color:var(--green)">0</div>
-          <div class="stat-footnote">过去 24 小时内</div>
+          <div class="stat-footnote">杩囧幓 24 灏忔椂鍐?/div>
           <div class="stat-accent accent-green"></div>
         </div>
         <div class="stat-card glass">
-          <span class="stat-icon">🛰️</span>
-          <div class="stat-label">气象数据源</div>
-          <div class="stat-value" style="font-size:20px;color:var(--green)">实时在线</div>
+          <span class="stat-icon">馃洶锔?/span>
+          <div class="stat-label">姘旇薄鏁版嵁婧?/div>
+          <div class="stat-value" style="font-size:20px;color:var(--green)">瀹炴椂鍦ㄧ嚎</div>
           <div class="stat-footnote">ECMWF / NOAA / CMEMS</div>
           <div class="stat-accent accent-green" style="right:-40px; width:80px; height:80px;"></div>
         </div>
       </div>
 
-      <!-- 地图 -->
+      <!-- 鍦板浘 -->
       <div class="map-wrap">
         <div id="map"></div>
       </div>
     </div>
 
-    <!-- 右侧 -->
+    <!-- 鍙充晶 -->
     <div class="side-panel">
       <div class="alert-section glass">
-        <h3>⚠️ 实时预警<span class="alert-count" id="alertBadge">0</span></h3>
+        <h3>鈿狅笍 瀹炴椂棰勮<span class="alert-count" id="alertBadge">0</span></h3>
         <div id="alertList">
           <div class="alert-empty">
-            <div class="icon">✅</div>
-            <div style="font-size:13px;">当前无预警信息</div>
-            <div style="font-size:11px;margin-top:4px;color:var(--text-muted);">各海域温度处于正常范围</div>
+            <div class="icon">鉁?/div>
+            <div style="font-size:13px;">褰撳墠鏃犻璀︿俊鎭?/div>
+            <div style="font-size:11px;margin-top:4px;color:var(--text-muted);">鍚勬捣鍩熸俯搴﹀浜庢甯歌寖鍥?/div>
           </div>
         </div>
       </div>
       <div class="station-section glass">
-        <h3>📍 沿海监测站点</h3>
+        <h3>馃搷 娌挎捣鐩戞祴绔欑偣</h3>
         <div id="stationList"></div>
       </div>
     </div>
   </div>
 
-  <!-- 底部图表 -->
+  <!-- 搴曢儴鍥捐〃 -->
   <div class="charts-row">
     <div class="chart-box glass">
-      <h3>📈 七日温度趋势<span class="chart-sub" id="chartSub">— 点击地图站点查看详情</span></h3>
+      <h3>馃搱 涓冩棩娓╁害瓒嬪娍<span class="chart-sub" id="chartSub">鈥?鐐瑰嚮鍦板浘绔欑偣鏌ョ湅璇︽儏</span></h3>
       <div id="chartTrend" style="width:100%;height:200px;"></div>
     </div>
     <div class="chart-box glass">
-      <h3>📊 全海域温度对比</h3>
+      <h3>馃搳 鍏ㄦ捣鍩熸俯搴﹀姣?/h3>
       <div id="chartCompare" style="width:100%;height:200px;"></div>
     </div>
   </div>
 
-  <!-- 底部状态栏 -->
+  <!-- 搴曢儴鐘舵€佹爮 -->
   <div class="footer-bar">
     <div style="display:flex;align-items:center;gap:12px;">
-      <span><span class="live-dot"></span>系统运行中</span>
+      <span><span class="live-dot"></span>绯荤粺杩愯涓?/span>
       <span class="status-bar">
-        <span class="status-ind green" id="apiStatus">● 数据连接正常</span>
+        <span class="status-ind green" id="apiStatus">鈼?鏁版嵁杩炴帴姝ｅ父</span>
       </span>
     </div>
-    <span>© 2026 OceanTempGuard · 海洋温度异常预警监测平台 v2.0</span>
+    <span>漏 2026 OceanTempGuard 路 娴锋磱娓╁害寮傚父棰勮鐩戞祴骞冲彴 v2.0</span>
   </div>
 
 </div>
@@ -453,11 +453,11 @@ body {
 <script>
 // APP_VERSION: 2026.11.01-r4
 // ============================================================
-// Canvas 水下世界引擎 — 光柱 / 鱼群 / 浮游生物 / 海底光斑
+// Canvas 姘翠笅涓栫晫寮曟搸 鈥?鍏夋煴 / 楸肩兢 / 娴父鐢熺墿 / 娴峰簳鍏夋枒
 // ============================================================
 ;(function() {
   const c = document.getElementById('oceanCanvas');
-  console.log('🌊 Ocean Monitor v2026.11.01-r4 ready');
+  console.log('馃寠 Ocean Monitor v2026.11.01-r5');
   const ctx = c.getContext('2d');
   let W, H, midX, midY;
   let tick = 0, mouseX = -400, mouseY = -400;
@@ -467,7 +467,7 @@ body {
   document.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
   document.addEventListener('mouseleave', () => { mouseX = -400; mouseY = -400; });
 
-  // ---- 海底光柱 (Caustics / God rays) ----
+  // ---- 娴峰簳鍏夋煴 (Caustics / God rays) ----
   const beams = Array.from({length: 5}, (_,i) => ({
     x: W * (0.1 + i * 0.2),
     width: 60 + Math.random() * 120,
@@ -490,7 +490,7 @@ body {
     });
   }
 
-  // ---- 鱼群 ----
+  // ---- 楸肩兢 ----
   const fishes = [];
   for (let i = 0; i < 22; i++) {
     fishes.push({
@@ -557,7 +557,7 @@ body {
     });
   }
 
-  // ---- 浮游生物 / 微光粒子 ----
+  // ---- 娴父鐢熺墿 / 寰厜绮掑瓙 ----
   const plankton = Array.from({length: 40}, () => ({
     x: Math.random() * W, y: Math.random() * H,
     r: 0.5 + Math.random() * 2.5,
@@ -589,7 +589,7 @@ body {
     });
   }
 
-  // ---- 海底深度渐变 ----
+  // ---- 娴峰簳娣卞害娓愬彉 ----
   function drawDepth() {
     const g = ctx.createLinearGradient(0, 0, 0, H);
     g.addColorStop(0, 'rgba(2,11,26,0)');
@@ -599,7 +599,7 @@ body {
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
 
-  // ---- 海面波纹光效 ----
+  // ---- 娴烽潰娉㈢汗鍏夋晥 ----
   function drawSurfaceRipples() {
     for (let i = 0; i < 6; i++) {
       const rx = (i * W * 0.18 + tick * 0.3) % (W + 200) - 100;
@@ -612,7 +612,7 @@ body {
     }
   }
 
-  // ---- 海底泥沙/地形暗示光斑 ----
+  // ---- 娴峰簳娉ユ矙/鍦板舰鏆楃ず鍏夋枒 ----
   function drawSeabed() {
     for (let i = 0; i < 8; i++) {
       const bx = (i * W * 0.14 + Math.sin(tick * 0.005 + i * 1.7) * 60) % (W + 300) - 150;
@@ -625,12 +625,12 @@ body {
     }
   }
 
-  // ---- 主循环 ----
+  // ---- 涓诲惊鐜?----
   function loop() {
     tick++;
     ctx.clearRect(0, 0, W, H);
 
-    // 底色
+    // 搴曡壊
     ctx.fillStyle = '#020b1a';
     ctx.fillRect(0, 0, W, H);
 
@@ -651,7 +651,7 @@ body {
 })();
 
 // ============================================================
-// 全局状态
+// 鍏ㄥ眬鐘舵€?
 // ============================================================
 let currentStationId = 1;
 let stationsData = [];
@@ -660,7 +660,7 @@ let map, markers = {};
 let prevAlertCount = 0;
 
 // ============================================================
-// Toast 通知
+// Toast 閫氱煡
 // ============================================================
 function showToast(msg, type = 'success') {
   const t = document.createElement('div');
@@ -670,7 +670,7 @@ function showToast(msg, type = 'success') {
 }
 
 // ============================================================
-// 时钟
+// 鏃堕挓
 // ============================================================
 function tick() {
   document.getElementById('clockText').textContent =
@@ -679,19 +679,19 @@ function tick() {
 tick(); setInterval(tick, 1000);
 
 // ============================================================
-// 地图
+// 鍦板浘
 // ============================================================
 function initMap() {
   map = L.map('map', {
     center: [30, 118], zoom: 5, zoomControl: false, attributionControl: false,
   });
   L.control.zoom({ position: 'bottomright' }).addTo(map);
-  // OpenStreetMap 原生 tiles（全球可访问）+ 暗色调滤镜融合海洋主题
+  // OpenStreetMap 鍘熺敓 tiles锛堝叏鐞冨彲璁块棶锛? 鏆楄壊璋冩护闀滆瀺鍚堟捣娲嬩富棰?
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 18,
     attribution: '&copy; OpenStreetMap contributors',
   }).addTo(map);
-  // 地图染色：降低亮度 + 偏蓝 + 降低饱和度 → 融入深色海洋背景
+  // 鍦板浘鏌撹壊锛氶檷浣庝寒搴?+ 鍋忚摑 + 闄嶄綆楗卞拰搴?鈫?铻嶅叆娣辫壊娴锋磱鑳屾櫙
   const mapStyle = document.createElement('style');
   mapStyle.textContent = '.leaflet-tile { filter: brightness(0.55) saturate(0.3) hue-rotate(170deg) !important; }';
   document.head.appendChild(mapStyle);
@@ -705,19 +705,19 @@ function updateMapMarkers(data) {
     const pulseAnim = st.status === 'danger' ? 'markerRipple 1s infinite' : 'none';
     const icon = L.divIcon({
       className: '',
-      html: `<div class="marker-pin" style="background:${statusColor};box-shadow:0 0 20px ${statusColor};${pulseAnim.startsWith('marker') ? `animation:${pulseAnim}` : ''}">🌊</div>`,
+      html: `<div class="marker-pin" style="background:${statusColor};box-shadow:0 0 20px ${statusColor};${pulseAnim.startsWith('marker') ? `animation:${pulseAnim}` : ''}">馃寠</div>`,
       iconSize: [44,44], iconAnchor: [22,22],
     });
     const m = L.marker([st.lat, st.lon], { icon }).addTo(map).bindPopup(`
       <div style="color:#e8f0fe;font-size:13px;min-width:140px;">
         <b style="color:#5eb8ff;font-size:15px;">${st.name}</b>
         <div style="margin:6px 0;display:flex;align-items:baseline;gap:6px;">
-          <span style="color:#89a4c7;">当前温度</span>
+          <span style="color:#89a4c7;">褰撳墠娓╁害</span>
           <span style="font-size:20px;font-weight:700;color:${statusColor};">
-            ${st.current_temp != null ? st.current_temp + '℃' : '—'}
+            ${st.current_temp != null ? st.current_temp + '鈩? : '鈥?}
           </span>
         </div>
-        <div style="font-size:11px;color:#4a6580;">${st.region} · 近24h告警 ${st.alert_count} 条</div>
+        <div style="font-size:11px;color:#4a6580;">${st.region} 路 杩?4h鍛婅 ${st.alert_count} 鏉?/div>
       </div>
     `);
     m.on('click', () => selectStation(st.id));
@@ -742,7 +742,7 @@ function initCharts() {
     ...chartDark,
     tooltip: { trigger: 'axis', backgroundColor: 'rgba(8,24,58,0.95)', borderColor: 'rgba(64,158,255,0.3)', textStyle: { color: '#e8f0fe', fontSize: 12 } },
     xAxis: { ...chartDark.xAxis, type: 'category', data: [], boundaryGap: false },
-    yAxis: { ...chartDark.yAxis, type: 'value', name: '℃', min: 'dataMin' },
+    yAxis: { ...chartDark.yAxis, type: 'value', name: '鈩?, min: 'dataMin' },
     series: [{
       data: [], type: 'line', smooth: true, symbol: 'none', lineStyle: { color: '#3b9eff', width: 2.5 },
       areaStyle: { color: new echarts.graphic.LinearGradient(0,0,0,1, [
@@ -750,7 +750,7 @@ function initCharts() {
       ]) },
       markLine: {
         silent: true, symbol: 'none', lineStyle: { color: '#ff4757', type: 'dashed', width: 1.5, opacity: 0.7 },
-        label: { color: '#ff4757', fontSize: 10, formatter: '高温阈值 30℃' },
+        label: { color: '#ff4757', fontSize: 10, formatter: '楂樻俯闃堝€?30鈩? },
         data: [{ yAxis: 30 }]
       }
     }]
@@ -758,7 +758,7 @@ function initCharts() {
 }
 
 // ============================================================
-// 数据加载
+// 鏁版嵁鍔犺浇
 // ============================================================
 async function loadOverview() {
   try {
@@ -771,8 +771,8 @@ async function loadOverview() {
       loadStationChart(currentStationId);
     }
   } catch(e) {
-    console.error('数据加载失败:', e);
-    document.getElementById('apiStatus').innerHTML = '● 数据连接异常';
+    console.error('鏁版嵁鍔犺浇澶辫触:', e);
+    document.getElementById('apiStatus').innerHTML = '鈼?鏁版嵁杩炴帴寮傚父';
     document.getElementById('apiStatus').className = 'status-ind';
   }
   loadAlerts();
@@ -792,7 +792,7 @@ async function loadStationChart(stationId) {
       series: [{ data: sampledV, markLine: { data: [{ yAxis: 30 }] } }]
     });
     const st = stationsData.find(s => s.id === stationId);
-    document.getElementById('chartSub').textContent = st ? `— ${st.name} · 近7日逐时温度` : '';
+    document.getElementById('chartSub').textContent = st ? `鈥?${st.name} 路 杩?鏃ラ€愭椂娓╁害` : '';
   } catch(e) { console.error(e); }
 }
 
@@ -804,7 +804,7 @@ async function loadAlerts() {
     badge.textContent = alerts.length;
     const container = document.getElementById('alertList');
     if (alerts.length === 0) {
-      container.innerHTML = `<div class="alert-empty"><div class="icon">✅</div><div style="font-size:13px;">当前无预警信息</div><div style="font-size:11px;margin-top:4px;color:var(--text-muted);">各海域温度处于正常范围</div></div>`;
+      container.innerHTML = `<div class="alert-empty"><div class="icon">鉁?/div><div style="font-size:13px;">褰撳墠鏃犻璀︿俊鎭?/div><div style="font-size:11px;margin-top:4px;color:var(--text-muted);">鍚勬捣鍩熸俯搴﹀浜庢甯歌寖鍥?/div></div>`;
       document.getElementById('cardAlerts').style.color = 'var(--green)';
     } else {
       container.innerHTML = alerts.slice(0, 10).map((a, i) => {
@@ -812,7 +812,7 @@ async function loadAlerts() {
         const tagCls = a.level === 'danger' ? 'danger' : a.level === 'info' ? 'info' : 'warning';
         return `<div class="alert-item ${lv}" style="animation-delay:${i*0.05}s">
           <span class="al-tag ${tagCls}">${a.type}</span>
-          <div class="al-title">${a.station} · ${a.temperature}℃</div>
+          <div class="al-title">${a.station} 路 ${a.temperature}鈩?/div>
           <div class="al-desc">${a.message}</div>
           <div class="al-time">${a.time ? a.time.substring(0,19).replace('T',' ') : ''}</div>
         </div>`;
@@ -821,7 +821,7 @@ async function loadAlerts() {
       const alertEl = document.getElementById('cardAlerts');
       alertEl.style.color = dangerCount > 0 ? 'var(--red)' : 'var(--orange)';
     }
-    // 告警变化动画
+    // 鍛婅鍙樺寲鍔ㄧ敾
     if (alerts.length !== prevAlertCount && alerts.length > 0) {
       badge.style.transform = 'scale(1.3)';
       setTimeout(() => badge.style.transform = '', 300);
@@ -836,17 +836,17 @@ function updateStatCards(data) {
     const maxTemp = Math.max(...valid.map(s => s.current_temp));
     const maxSt = valid.find(s => s.current_temp === maxTemp);
     const el = document.getElementById('cardMaxTemp');
-    el.textContent = maxTemp + '℃';
+    el.textContent = maxTemp + '鈩?;
     el.style.color = maxTemp >= 30 ? 'var(--red)' : 'var(--orange)';
     el.classList.add('num-animate');
     setTimeout(() => el.classList.remove('num-animate'), 400);
-    document.getElementById('cardMaxStation').textContent = `最高位于 ${maxSt.name}`;
+    document.getElementById('cardMaxStation').textContent = `鏈€楂樹綅浜?${maxSt.name}`;
   }
   document.getElementById('cardStations').textContent = data.length;
-  document.getElementById('apiStatus').innerHTML = '● 数据连接正常';
+  document.getElementById('apiStatus').innerHTML = '鈼?鏁版嵁杩炴帴姝ｅ父';
   document.getElementById('apiStatus').className = 'status-ind green';
 
-  // 对比图
+  // 瀵规瘮鍥?
   const names = data.map(s => s.name);
   const temps = data.map(s => s.current_temp || 0);
   const avgs = data.map(s => s.avg_24h || 0);
@@ -855,11 +855,11 @@ function updateStatCards(data) {
     tooltip: { trigger: 'axis', backgroundColor: 'rgba(8,24,58,0.95)', borderColor: 'rgba(64,158,255,0.3)', textStyle: { color: '#e8f0fe' } },
     legend: { textStyle: { color: '#4a6580', fontSize: 11 }, top: 0, right: 0 },
     xAxis: { ...chartDark.xAxis, type: 'category', data: names, axisLabel: { ...chartDark.xAxis.axisLabel, rotate: 25 } },
-    yAxis: { ...chartDark.yAxis, type: 'value', name: '℃' },
+    yAxis: { ...chartDark.yAxis, type: 'value', name: '鈩? },
     series: [
-      { name: '当前温度', type: 'bar', data: temps, barWidth: 14, itemStyle: { borderRadius: [4,4,0,0],
+      { name: '褰撳墠娓╁害', type: 'bar', data: temps, barWidth: 14, itemStyle: { borderRadius: [4,4,0,0],
         color: p => p.value >= 30 ? '#ff4757' : p.value >= 25 ? '#ffa940' : '#3b9eff' }},
-      { name: '24h 均值', type: 'bar', data: avgs, barWidth: 14, itemStyle: { borderRadius: [4,4,0,0], color: 'rgba(59,158,255,0.25)' }},
+      { name: '24h 鍧囧€?, type: 'bar', data: avgs, barWidth: 14, itemStyle: { borderRadius: [4,4,0,0], color: 'rgba(59,158,255,0.25)' }},
     ]
   });
 }
@@ -871,7 +871,7 @@ function updateStationList(data) {
     return `<div class="station-row ${s.id===currentStationId?'active':''}" onclick="selectStation(${s.id})">
       <span class="st-dot ${dotCls}"></span>
       <div class="st-info"><div class="st-name">${s.name}</div><div class="st-region">${s.region}</div></div>
-      <span class="st-temp" style="color:${tColor}">${s.current_temp!=null?s.current_temp+'℃':'—'}</span>
+      <span class="st-temp" style="color:${tColor}">${s.current_temp!=null?s.current_temp+'鈩?:'鈥?}</span>
     </div>`;
   }).join('');
 }
@@ -888,33 +888,33 @@ function selectStation(id) {
 }
 
 // ============================================================
-// 按钮操作
+// 鎸夐挳鎿嶄綔
 // ============================================================
 async function refreshAll() {
   const btn = document.querySelector('.btn-secondary');
   const orig = btn.innerHTML;
-  btn.innerHTML = '<span style="animation:spin 0.8s linear infinite">⟳</span> 启动中...';
+  btn.innerHTML = '<span style="animation:spin 0.8s linear infinite">鉄?/span> 鍚姩涓?..';
   btn.style.pointerEvents = 'none';
   
-  // 1. 启动后台刷新
+  // 1. 鍚姩鍚庡彴鍒锋柊
   let startData;
   try {
-    const startResp = await fetch('/api/refresh', { method: 'POST' });
+    const startResp = await fetch('/api/refresh?_cb=Date.now(), { method: 'POST' });
     startData = await startResp.json();
   } catch (e) {
-    showToast('无法连接服务器，请稍后重试', 'error');
+    showToast('鏃犳硶杩炴帴鏈嶅姟鍣紝璇风◢鍚庨噸璇?, 'error');
     btn.innerHTML = orig; btn.style.pointerEvents = '';
     return;
   }
   
   if (startData.status === 'running') {
-    showToast('刷新任务已在执行中，请稍候', 'info');
+    showToast('鍒锋柊浠诲姟宸插湪鎵ц涓紝璇风◢鍊?, 'info');
   }
   
-  // 2. 轮询等待完成
+  // 2. 杞绛夊緟瀹屾垚
   let attempts = 0;
   let lastError = null;
-  btn.innerHTML = '<span style="animation:spin 0.8s linear infinite">⟳</span> 拉取Open-Meteo数据中...';
+  btn.innerHTML = '<span style="animation:spin 0.8s linear infinite">鉄?/span> 鎷夊彇Open-Meteo鏁版嵁涓?..';
   
   while (attempts < 60) {
     attempts++;
@@ -926,30 +926,30 @@ async function refreshAll() {
       
       if (!statusData.running) {
         if (statusData.error) {
-          showToast(`刷新出错: ${statusData.error}`, 'error');
+          showToast(`鍒锋柊鍑洪敊: ${statusData.error}`, 'error');
           break;
         }
         const results = statusData.results;
-        if (!results) { showToast('刷新完成，无新数据', 'warning'); break; }
+        if (!results) { showToast('鍒锋柊瀹屾垚锛屾棤鏂版暟鎹?, 'warning'); break; }
         const ok = results.filter(x => x.success).length;
-        showToast(`数据同步完成 · ${ok}/${results.length} 个站点更新成功`, ok === results.length ? 'success' : 'error');
+        showToast(`鏁版嵁鍚屾瀹屾垚 路 ${ok}/${results.length} 涓珯鐐规洿鏂版垚鍔焋, ok === results.length ? 'success' : 'error');
         await loadOverview();
         if (stationsData.length > 0) loadStationChart(currentStationId);
         break;
       }
       // still running, update button text
-      btn.innerHTML = '<span style="animation:spin 0.8s linear infinite">⟳</span> 拉取中... (' + attempts + '/60)';
+      btn.innerHTML = '<span style="animation:spin 0.8s linear infinite">鉄?/span> 鎷夊彇涓?.. (' + attempts + '/60)';
     } catch (e) {
       lastError = e;
-      btn.innerHTML = '<span style="animation:spin 0.8s linear infinite">⟳</span> 重试中... (' + attempts + '/60)';
+      btn.innerHTML = '<span style="animation:spin 0.8s linear infinite">鉄?/span> 閲嶈瘯涓?.. (' + attempts + '/60)';
     }
   }
   
   if (attempts >= 60) {
     if (lastError) {
-      showToast('服务器响应超时（Render 冷启动中），后台仍在刷新，请稍后点同步按钮重试', 'warning');
+      showToast('鏈嶅姟鍣ㄥ搷搴旇秴鏃讹紙Render 鍐峰惎鍔ㄤ腑锛夛紝鍚庡彴浠嶅湪鍒锋柊锛岃绋嶅悗鐐瑰悓姝ユ寜閽噸璇?, 'warning');
     } else {
-      showToast('刷新超时，请重试', 'warning');
+      showToast('鍒锋柊瓒呮椂锛岃閲嶈瘯', 'warning');
     }
   }
   
@@ -959,26 +959,26 @@ async function refreshAll() {
 async function runAnalysis() {
   const btn = document.querySelector('.btn-amber');
   const orig = btn.innerHTML;
-  btn.innerHTML = '<span style="animation:spin 0.8s linear infinite">⟳</span> 分析中...';
+  btn.innerHTML = '<span style="animation:spin 0.8s linear infinite">鉄?/span> 鍒嗘瀽涓?..';
   btn.style.pointerEvents = 'none';
   try {
     const resp = await fetch('/api/run_analysis', { method: 'POST' });
     const r = await resp.json();
     if (r.alerts_generated > 0) {
-      showToast(`智能分析完成 · 新发现 ${r.alerts_generated} 条温度异常`);
+      showToast(`鏅鸿兘鍒嗘瀽瀹屾垚 路 鏂板彂鐜?${r.alerts_generated} 鏉℃俯搴﹀紓甯竊);
     } else {
-      showToast('分析完成 · 当前各海域温度均在正常范围');
+      showToast('鍒嗘瀽瀹屾垚 路 褰撳墠鍚勬捣鍩熸俯搴﹀潎鍦ㄦ甯歌寖鍥?);
     }
     loadAlerts();
   } catch(e) {
-    showToast('分析执行失败', 'error');
+    showToast('鍒嗘瀽鎵ц澶辫触', 'error');
   } finally {
     btn.innerHTML = orig; btn.style.pointerEvents = '';
   }
 }
 
 // ============================================================
-// 启动
+// 鍚姩
 // ============================================================
 document.addEventListener('DOMContentLoaded', () => {
   initMap();
