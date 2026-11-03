@@ -1,9 +1,27 @@
+# 数据库文件
 ocean_data.db
+*.db
+
+# Python 缓存
 __pycache__/
 *.pyc
+*.pyo
+.venv/
+venv/
+
+# 环境变量
 .env
+
+# 本机启动脚本（不提交公网）
 启动服务.bat
 启动公网.bat
 1-Flask.bat
 2-SSH.bat
 start-server.ps1
+run.bat
+
+# IDE / 系统
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

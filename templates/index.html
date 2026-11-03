@@ -7,9 +7,9 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>海洋温度异常预警监测平台</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet.css') }}" />
+<script src="{{ url_for('static', filename='vendor/leaflet.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/echarts.min.js') }}"></script>
 <style>
 /* ====== 全局重置 ====== */
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -205,6 +205,35 @@ body {
 /* ====== 右侧面板 ====== */
 .side-panel { display: flex; flex-direction: column; gap: 16px; }
 
+/* 预警报告面板 */
+.report-section { padding: 20px; }
+.report-section h3 {
+  font-size: 15px; font-weight: 700; margin-bottom: 12px;
+  display: flex; align-items: center; gap: 8px; color: var(--text-primary);
+}
+.report-score {
+  font-size: 12px; padding: 2px 10px; border-radius: 12px;
+  background: rgba(59,158,255,0.2); color: var(--blue-light); font-weight: 700;
+}
+.report-summary {
+  font-size: 12px; color: var(--text-secondary); line-height: 1.7;
+  margin-bottom: 10px; padding: 10px 12px; border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04);
+}
+.report-stations { max-height: 200px; overflow-y: auto; }
+.report-station-row {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+  font-size: 11px; color: var(--text-secondary); border-radius: 6px;
+}
+.report-station-row:hover { background: rgba(255,255,255,0.04); }
+.report-station-row .rs-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.report-station-row .rs-score { font-weight: 700; }
+.rs-level { font-size: 10px; padding: 1px 6px; border-radius: 8px; font-weight: 700; }
+.rs-level.normal { background: rgba(0,227,150,0.15); color: var(--green); }
+.rs-level.watch { background: rgba(59,158,255,0.15); color: var(--blue-light); }
+.rs-level.warning { background: rgba(255,169,64,0.15); color: var(--orange); }
+.rs-level.danger { background: rgba(255,71,87,0.2); color: var(--red); }
+
 /* 告警面板 */
 .alert-section { padding: 20px; flex: 1; overflow-y: auto; }
 .alert-section h3 {
@@ -392,11 +421,11 @@ body {
           <div class="stat-accent accent-green"></div>
         </div>
         <div class="stat-card glass">
-          <span class="stat-icon">🛰️</span>
-          <div class="stat-label">气象数据源</div>
-          <div class="stat-value" style="font-size:20px;color:var(--green)">实时在线</div>
-          <div class="stat-footnote">ECMWF / NOAA / CMEMS</div>
-          <div class="stat-accent accent-green" style="right:-40px; width:80px; height:80px;"></div>
+          <span class="stat-icon">📋</span>
+          <div class="stat-label">综合评分</div>
+          <div class="stat-value" id="cardScore" style="color:var(--green)">--</div>
+          <div class="stat-footnote" id="cardScoreLabel">待分析</div>
+          <div class="stat-accent accent-green"></div>
         </div>
       </div>
 
@@ -408,6 +437,16 @@ body {
 
     <!-- 右侧 -->
     <div class="side-panel">
+      <div class="report-section glass" id="reportSection">
+        <h3>📋 预警报告 <span class="report-score" id="reportScore">--</span></h3>
+        <div id="reportBody">
+          <div class="alert-empty">
+            <div class="icon">🔍</div>
+            <div style="font-size:13px;">尚未生成报告</div>
+            <div style="font-size:11px;margin-top:4px;color:var(--text-muted);">点击顶部「执行智能分析」生成</div>
+          </div>
+        </div>
+      </div>
       <div class="alert-section glass">
         <h3>⚠️ 实时预警<span class="alert-count" id="alertBadge">0</span></h3>
         <div id="alertList">
@@ -687,10 +726,14 @@ function initMap() {
     center: [30, 118], zoom: 5, zoomControl: false, attributionControl: false,
   });
   L.control.zoom({ position: 'bottomright' }).addTo(map);
-  // OpenStreetMap 原生 tiles（全球可访问）+ 暗色调滤镜融合海洋主题
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 18,
-    attribution: '&copy; OpenStreetMap contributors',
+  // ArcGIS 海洋底图（国内可达，主题契合）+ 海岸线/标注参考层
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 12,
+    attribution: '&copy; Esri, GEBCO, NOAA',
+  }).addTo(map);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Reference/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 12,
+    attribution: '&copy; Esri',
   }).addTo(map);
   // 地图染色：降低亮度 + 偏蓝 + 降低饱和度 → 融入深色海洋背景
   const mapStyle = document.createElement('style');
@@ -809,16 +852,17 @@ async function loadAlerts() {
       document.getElementById('cardAlerts').style.color = 'var(--green)';
     } else {
       container.innerHTML = alerts.slice(0, 10).map((a, i) => {
-        const lv = a.level === 'danger' ? 'lv-danger' : a.level === 'info' ? 'lv-info' : '';
-        const tagCls = a.level === 'danger' ? 'danger' : a.level === 'info' ? 'info' : 'warning';
+        const lv = a.alert_level === 'danger' ? 'lv-danger' : a.alert_level === 'info' ? 'lv-info' : '';
+        const tagCls = a.alert_level === 'danger' ? 'danger' : a.alert_level === 'info' ? 'info' : 'warning';
+        const t = a.target_time ? a.target_time.substring(0, 16).replace('T', ' ') : '';
         return `<div class="alert-item ${lv}" style="animation-delay:${i*0.05}s">
-          <span class="al-tag ${tagCls}">${a.type}</span>
-          <div class="al-title">${a.station} · ${a.temperature}℃</div>
+          <span class="al-tag ${tagCls}">${a.alert_type}</span>
+          <div class="al-title">${a.station_name} · ${a.temperature}℃</div>
           <div class="al-desc">${a.message}</div>
-          <div class="al-time">${a.time ? a.time.substring(0,19).replace('T',' ') : ''}</div>
+          <div class="al-time">${t}</div>
         </div>`;
       }).join('');
-      const dangerCount = alerts.filter(a => a.level === 'danger').length;
+      const dangerCount = alerts.filter(a => a.alert_level === 'danger').length;
       const alertEl = document.getElementById('cardAlerts');
       alertEl.style.color = dangerCount > 0 ? 'var(--red)' : 'var(--orange)';
     }
@@ -965,17 +1009,58 @@ async function runAnalysis() {
   try {
     const resp = await fetch('/api/run_analysis', { method: 'POST' });
     const r = await resp.json();
-    if (r.alerts_generated > 0) {
-      showToast(`智能分析完成 · 新发现 ${r.alerts_generated} 条温度异常`);
+    if (r.report) {
+      renderReport(r.report);
+      const alertCount = r.report.stations.reduce((n, s) => n + s.alerts.length, 0);
+      showToast(`智能分析完成 · 综合评分 ${r.report.overall_score} 分 · ${alertCount} 条异常`, 'success');
     } else {
       showToast('分析完成 · 当前各海域温度均在正常范围');
     }
     loadAlerts();
+    loadOverview();
   } catch(e) {
     showToast('分析执行失败', 'error');
   } finally {
     btn.innerHTML = orig; btn.style.pointerEvents = '';
   }
+}
+
+function renderReport(report) {
+  document.getElementById('reportScore').textContent = report.overall_score + '分';
+  const cardScore = document.getElementById('cardScore');
+  cardScore.textContent = report.overall_score;
+  const levelColors = { normal: 'var(--green)', watch: 'var(--blue-light)', warning: 'var(--orange)', danger: 'var(--red)' };
+  cardScore.style.color = levelColors[report.overall_level] || 'var(--green)';
+  document.getElementById('cardScoreLabel').textContent = report.overall_label;
+  document.getElementById('reportScore').style.background =
+    report.overall_level === 'danger' ? 'rgba(255,71,87,0.2)' :
+    report.overall_level === 'warning' ? 'rgba(255,169,64,0.2)' :
+    report.overall_level === 'watch' ? 'rgba(59,158,255,0.2)' : 'rgba(0,227,150,0.15)';
+  document.getElementById('reportScore').style.color = levelColors[report.overall_level];
+
+  const rows = report.stations.map(s => {
+    const scoreColor = s.score >= 80 ? 'var(--green)' : s.score >= 60 ? 'var(--blue-light)' : s.score >= 40 ? 'var(--orange)' : 'var(--red)';
+    return `<div class="report-station-row">
+      <span class="rs-name">${s.name}</span>
+      <span class="rs-level ${s.level}">${s.label}</span>
+      <span class="rs-score" style="color:${scoreColor}">${s.score}</span>
+    </div>`;
+  }).join('');
+
+  document.getElementById('reportBody').innerHTML = `
+    <div class="report-summary">${report.summary}</div>
+    <div class="report-stations">${rows}</div>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:8px;">
+      生成于 ${report.generated_at ? report.generated_at.substring(0,19).replace('T',' ') : ''}
+    </div>`;
+}
+
+async function loadReport() {
+  try {
+    const resp = await fetch('/api/report');
+    const r = await resp.json();
+    if (r.status === 'ok' && r.report) renderReport(r.report);
+  } catch(e) {}
 }
 
 // ============================================================
@@ -985,6 +1070,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initMap();
   initCharts();
   loadOverview();
+  loadReport();
   setInterval(loadOverview, 300000);
 });
 
