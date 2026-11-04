@@ -6,8 +6,10 @@
 业务逻辑已下沉到 sync_service / alert_engine / report_service。
 """
 import threading
+import time
 from datetime import datetime
 
+import requests
 from flask import Flask, jsonify, request, render_template
 
 import config
@@ -15,6 +17,185 @@ from database import init_db, query_all, get_conn, query_one
 from sync_service import sync_all, has_historical_baseline, latest_data_span
 from alert_engine import evaluate_all, evaluate_station
 from report_service import generate_report, latest_report
+
+
+# ======================================================================
+# 多源外部数据接入（带 TTL 内存缓存，避免频繁打到第三方接口）
+# ======================================================================
+_CACHE = {}
+_CACHE_LOCK = threading.Lock()
+
+
+def _cache_get(key, ttl):
+    """读取缓存；过期返回 None。"""
+    with _CACHE_LOCK:
+        item = _CACHE.get(key)
+    if not item:
+        return None
+    if time.time() - item["ts"] > ttl:
+        return None
+    return item["data"]
+
+
+def _cache_set(key, data):
+    with _CACHE_LOCK:
+        _CACHE[key] = {"ts": time.time(), "data": data}
+
+
+def _now_iso():
+    return datetime.now().isoformat(timespec="seconds")
+
+
+# ---------------------------------------------------------------- 源 1
+def fetch_marine_live(lat, lon, forecast_days=2, timeout=18):
+    """Open-Meteo Marine API —— 海浪 / 涌浪 / 海流 / 海表温度。"""
+    variables = [
+        "sea_surface_temperature",
+        "wave_height", "wave_direction", "wave_period",
+        "swell_wave_height", "swell_wave_period",
+        "ocean_current_velocity", "ocean_current_direction",
+    ]
+    try:
+        resp = requests.get(
+            config.MARINE_API_URL,
+            params={
+                "latitude": lat, "longitude": lon,
+                "hourly": ",".join(variables),
+                "timezone": config.TIMEZONE,
+                "forecast_days": forecast_days,
+            },
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        hourly = resp.json().get("hourly") or {}
+        return {"ok": True, "hourly": hourly}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc)}
+
+
+# ---------------------------------------------------------------- 源 2
+def fetch_weather_live(lat, lon, forecast_days=2, timeout=18):
+    """Open-Meteo Weather API —— 风 / 气温 / 气压 / 降水 / 云量 / 湿度。"""
+    variables = [
+        "temperature_2m", "wind_speed_10m", "wind_direction_10m",
+        "surface_pressure", "precipitation", "cloud_cover", "relative_humidity_2m",
+    ]
+    try:
+        resp = requests.get(
+            "https://api.open-meteo.com/v1/forecast",
+            params={
+                "latitude": lat, "longitude": lon,
+                "hourly": ",".join(variables),
+                "timezone": config.TIMEZONE,
+                "forecast_days": forecast_days,
+            },
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        hourly = resp.json().get("hourly") or {}
+        return {"ok": True, "hourly": hourly}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc)}
+
+
+# ---------------------------------------------------------------- 源 3
+FISHERY_INDICATORS = [
+    ("ER.FSH.PROD.MT", "渔业总产量", "吨"),
+    ("ER.FSH.CAPT.MT", "海洋捕捞产量", "吨"),
+    ("ER.FSH.AQUA.MT", "水产养殖产量", "吨"),
+]
+
+
+def fetch_fishery_stats(timeout=25):
+    """World Bank Open Data —— 中国渔业产量（年度）。"""
+    out = {"ok": True, "country": "CHN", "series": [], "updated_at": _now_iso()}
+    for code, label, unit in FISHERY_INDICATORS:
+        points_rows = None
+        last_error = None
+        for attempt in range(2):
+            try:
+                resp = requests.get(
+                    f"https://api.worldbank.org/v2/country/CHN/indicator/{code}",
+                    params={"format": "json", "per_page": 80, "date": "2000:2024"},
+                    timeout=timeout,
+                )
+                resp.raise_for_status()
+                payload = resp.json()
+                points_rows = []
+                for rec in (payload[1] or []):
+                    if rec.get("value") is not None:
+                        points_rows.append({"year": rec["date"], "value": round(float(rec["value"]), 2)})
+                points_rows.sort(key=lambda r: r["year"])
+                break
+            except Exception as exc:  # noqa: BLE001
+                last_error = exc
+                if attempt == 0:
+                    time.sleep(0.8)
+        if points_rows is None:
+            out["ok"] = False
+            out.setdefault("errors", []).append(f"{code}: {last_error}")
+            continue
+        out["series"].append({
+            "code": code, "label": label, "unit": unit,
+            "points": points_rows,
+            "latest": points_rows[-1] if points_rows else None,
+        })
+    return out
+
+
+# ---------------------------------------------------------------- 渔业适宜度
+def _sea_state_level(wave_h):
+    """按浪高判定海况等级与作业适宜度。"""
+    if wave_h is None:
+        return {"level": "未知", "suitability": None, "color": "muted"}
+    if wave_h < 0.5:
+        return {"level": "0–1 级（微浪）", "suitability": "优", "color": "good"}
+    if wave_h < 1.25:
+        return {"level": "2–3 级（轻浪）", "suitability": "良", "color": "good"}
+    if wave_h < 2.5:
+        return {"level": "4 级（中浪）", "suitability": "一般", "color": "warn"}
+    if wave_h < 4.0:
+        return {"level": "5 级（大浪）", "suitability": "较差", "color": "bad"}
+    return {"level": "6 级以上（巨浪）", "suitability": "恶劣", "color": "bad"}
+
+
+def _wind_level(speed_kmh):
+    if speed_kmh is None:
+        return {"level": "未知", "suitability": None, "color": "muted"}
+    if speed_kmh < 20:
+        return {"level": "和风", "suitability": "优", "color": "good"}
+    if speed_kmh < 40:
+        return {"level": "清劲风", "suitability": "良", "color": "good"}
+    if speed_kmh < 62:
+        return {"level": "强风", "suitability": "较差", "color": "warn"}
+    return {"level": "疾风以上", "suitability": "恶劣", "color": "bad"}
+
+
+_SUIT_RANK = {"优": 4, "良": 3, "一般": 2, "较差": 1, "恶劣": 0}
+
+
+def _pick_current_index(times):
+    """在逐小时序列中定位『当前时刻』的下标（找不到则用 0）。"""
+    if not times:
+        return 0
+    now = datetime.now().strftime("%Y-%m-%dT%H")
+    for i, t in enumerate(times):
+        if str(t).startswith(now):
+            return i
+    return 0
+
+
+def _series_stats(values, start_idx, span=24):
+    """取 start_idx 起 span 个点的统计量。"""
+    chunk = [v for v in values[start_idx:start_idx + span] if v is not None]
+    if not chunk:
+        return {"now": None, "avg": None, "max": None, "min": None}
+    return {
+        "now": values[start_idx] if start_idx < len(values) else None,
+        "avg": round(sum(chunk) / len(chunk), 2),
+        "max": max(chunk),
+        "min": min(chunk),
+    }
 
 
 def create_app():
@@ -364,6 +545,131 @@ def create_app():
 
         result.sort(key=lambda x: x["id"])
         return jsonify(result)
+
+    # ------------------------------------------------------------------
+    # 多源数据：海浪 / 气象 / 渔业适宜度（实时调取外部接口）
+    # ------------------------------------------------------------------
+    @app.route("/api/sources/<int:station_id>", methods=["GET"])
+    def sources(station_id):
+        station = config.STATION_BY_ID.get(station_id)
+        if not station:
+            return jsonify({"error": "未知站点"}), 404
+
+        lat, lon = station["lat"], station["lon"]
+
+        # --- 源 1：海洋要素（缓存 10 分钟）
+        mkey = f"marine:{station_id}"
+        marine = _cache_get(mkey, 600)
+        if marine is None:
+            marine = fetch_marine_live(lat, lon)
+            if marine.get("ok"):
+                _cache_set(mkey, marine)
+
+        # --- 源 2：气象要素（缓存 10 分钟）
+        wkey = f"weather:{station_id}"
+        weather = _cache_get(wkey, 600)
+        if weather is None:
+            weather = fetch_weather_live(lat, lon)
+            if weather.get("ok"):
+                _cache_set(wkey, weather)
+
+        hourly_m = marine.get("hourly") or {}
+        hourly_w = weather.get("hourly") or {}
+        times = hourly_m.get("time") or hourly_w.get("time") or []
+        idx = _pick_current_index(times)
+
+        def stat(key, src="marine"):
+            src_hourly = hourly_m if src == "marine" else hourly_w
+            return _series_stats(src_hourly.get(key) or [], idx)
+
+        sst = stat("sea_surface_temperature")
+        wave_h = stat("wave_height")
+        wave_p = stat("wave_period")
+        swell_h = stat("swell_wave_height")
+        current_v = stat("ocean_current_velocity")
+        current_d = stat("ocean_current_direction")
+        wave_d = stat("wave_direction")
+
+        air_t = stat("temperature_2m", "weather")
+        wind_s = stat("wind_speed_10m", "weather")
+        wind_d = stat("wind_direction_10m", "weather")
+        pressure = stat("surface_pressure", "weather")
+        precip = stat("precipitation", "weather")
+        cloud = stat("cloud_cover", "weather")
+        humidity = stat("relative_humidity_2m", "weather")
+
+        sea_state = _sea_state_level(wave_h["now"])
+        wind_state = _wind_level(wind_s["now"])
+
+        # 综合渔业作业适宜度：取海况与风的较差者
+        ranks = [r for r in (_SUIT_RANK.get(sea_state["suitability"]),
+                             _SUIT_RANK.get(wind_state["suitability"])) if r is not None]
+        if ranks:
+            worst = min(ranks)
+            overall = {v: k for k, v in _SUIT_RANK.items()}.get(worst, "未知")
+            overall_color = "good" if worst >= 3 else ("warn" if worst == 2 else "bad")
+        else:
+            overall, overall_color = "未知", "muted"
+
+        advice = {
+            "优": "海况平稳，适宜出海作业与捕捞。",
+            "良": "海况较好，可正常作业，注意常规安全。",
+            "一般": "海况转差，中小型渔船应谨慎出海。",
+            "较差": "风浪较大，建议中小型渔船回港避风。",
+            "恶劣": "海况恶劣，所有渔船应停止作业并回港避风。",
+        }.get(overall, "暂无评估。")
+
+        return jsonify({
+            "station": {
+                "id": station["id"], "name": station["name"],
+                "region": station["region"], "lat": lat, "lon": lon,
+            },
+            "fetched_at": _now_iso(),
+            "marine": {
+                "ok": marine.get("ok", False),
+                "source": "Open-Meteo Marine API",
+                "url": config.MARINE_API_URL,
+                "sst": sst, "wave_height": wave_h, "wave_period": wave_p,
+                "wave_direction": wave_d, "swell_wave_height": swell_h,
+                "current_velocity": current_v, "current_direction": current_d,
+                "error": marine.get("error"),
+            },
+            "weather": {
+                "ok": weather.get("ok", False),
+                "source": "Open-Meteo Weather API",
+                "url": "https://api.open-meteo.com/v1/forecast",
+                "air_temp": air_t, "wind_speed": wind_s, "wind_direction": wind_d,
+                "pressure": pressure, "precipitation": precip,
+                "cloud_cover": cloud, "humidity": humidity,
+                "error": weather.get("error"),
+            },
+            "suitability": {
+                "sea_state": sea_state,
+                "wind_state": wind_state,
+                "overall": overall,
+                "overall_color": overall_color,
+                "advice": advice,
+            },
+            "timeline": {
+                "times": times[idx:idx + 24],
+                "wave_height": (hourly_m.get("wave_height") or [])[idx:idx + 24],
+                "wind_speed": (hourly_w.get("wind_speed_10m") or [])[idx:idx + 24],
+                "sst": (hourly_m.get("sea_surface_temperature") or [])[idx:idx + 24],
+            },
+        })
+
+    # ------------------------------------------------------------------
+    # 渔业产量数据（World Bank Open Data）
+    # ------------------------------------------------------------------
+    @app.route("/api/fishery", methods=["GET"])
+    def fishery():
+        cached = _cache_get("fishery", 86400)  # 年度数据，缓存 1 天
+        if cached is not None:
+            return jsonify(cached)
+        data = fetch_fishery_stats()
+        if data.get("ok"):
+            _cache_set("fishery", data)
+        return jsonify(data)
 
     @app.route("/api/status", methods=["GET"])
     def status():

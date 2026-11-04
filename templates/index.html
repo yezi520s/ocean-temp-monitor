@@ -594,6 +594,64 @@ body {
 .fc-risk.warning { background: rgba(255,169,64,0.12); color: var(--orange); }
 .fc-risk.danger { background: rgba(255,71,87,0.15); color: var(--red); }
 
+/* ====== 多源数据 ====== */
+.src-fetched { margin-left: auto; font-size: 11px; color: var(--text-muted); }
+
+.suit-banner {
+  display: flex; align-items: center; gap: 22px; flex-wrap: wrap;
+  padding: 18px 22px; margin-bottom: 14px;
+  border-left: 4px solid rgba(59,158,255,0.5);
+}
+.suit-banner.good { border-left-color: var(--green); }
+.suit-banner.warn { border-left-color: var(--orange); }
+.suit-banner.bad { border-left-color: var(--red); }
+.suit-main { min-width: 118px; }
+.suit-label { font-size: 11px; color: var(--text-muted); letter-spacing: 0.5px; }
+.suit-value { font-size: 30px; font-weight: 800; letter-spacing: -1px; margin-top: 2px; }
+.suit-banner.good .suit-value { color: var(--green); }
+.suit-banner.warn .suit-value { color: var(--orange); }
+.suit-banner.bad .suit-value { color: var(--red); }
+.suit-banner.muted .suit-value { color: var(--text-muted); }
+.suit-detail { display: flex; gap: 22px; }
+.suit-item { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-muted); }
+.suit-item b { font-size: 13px; color: var(--text-primary); font-weight: 700; }
+.suit-advice {
+  flex: 1; min-width: 200px; font-size: 12px; line-height: 1.7;
+  color: var(--text-secondary); padding: 10px 14px; border-radius: 10px;
+  background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.04);
+}
+
+.src-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.src-card { padding: 16px 18px; }
+.src-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 3px; }
+.src-head h3 { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+.src-badge {
+  font-size: 10px; font-weight: 700; padding: 2px 9px; border-radius: 10px;
+  background: rgba(255,255,255,0.05); color: var(--text-muted);
+}
+.src-badge.ok { background: rgba(0,227,150,0.12); color: var(--green); }
+.src-badge.fail { background: rgba(255,71,87,0.15); color: var(--red); }
+.src-provider { font-size: 10px; color: var(--text-muted); margin-bottom: 10px; letter-spacing: 0.3px; }
+.src-rows { display: flex; flex-direction: column; }
+.src-row {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  padding: 6px 0; border-bottom: 1px dashed rgba(255,255,255,0.05); font-size: 12px;
+}
+.src-row:last-child { border-bottom: none; }
+.src-row .sr-k { color: var(--text-muted); flex-shrink: 0; }
+.src-row .sr-v { color: var(--text-primary); font-weight: 600; text-align: right; }
+.src-row .sr-v small { color: var(--text-muted); font-weight: 400; font-size: 10px; margin-left: 3px; }
+
+@media (max-width: 1100px) {
+  .src-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 768px) {
+  .suit-banner { gap: 14px; padding: 14px 16px; }
+  .suit-value { font-size: 24px; }
+  .suit-detail { gap: 16px; }
+  .suit-advice { min-width: 100%; }
+}
+
 @media (max-width: 1200px) {
   .pipe-stats { grid-template-columns: repeat(3, 1fr); }
 }
@@ -650,6 +708,9 @@ body {
     </button>
     <button class="nav-tab" data-view="pipeline" onclick="switchView('pipeline')">
       <span class="nav-ico">🔗</span><span class="nav-label">数据链路</span>
+    </button>
+    <button class="nav-tab" data-view="sources" onclick="switchView('sources')">
+      <span class="nav-ico">🐟</span><span class="nav-label">多源数据</span>
     </button>
     <button class="nav-tab" data-view="forecast" onclick="switchView('forecast')">
       <span class="nav-ico">📈</span><span class="nav-label">预警预报</span>
@@ -819,11 +880,110 @@ body {
           <div class="model-item"><b>综合评分</b><span>五维加权归一化，满分 100</span></div>
         </div>
       </div>
+
+      <h3 class="sec-title">🌐 已接入外部数据源（3 个）</h3>
+      <div class="src-grid">
+        <div class="glass src-card">
+          <div class="src-head"><h3>🌊 Open-Meteo Marine</h3><span class="src-badge ok">已接入</span></div>
+          <div class="src-provider">marine-api.open-meteo.com</div>
+          <div class="src-rows">
+            <div class="src-row"><span class="sr-k">海表温度 SST</span><span class="sr-v">逐小时</span></div>
+            <div class="src-row"><span class="sr-k">浪高 / 浪周期 / 浪向</span><span class="sr-v">逐小时</span></div>
+            <div class="src-row"><span class="sr-k">涌浪高度</span><span class="sr-v">逐小时</span></div>
+            <div class="src-row"><span class="sr-k">海流速度 / 流向</span><span class="sr-v">逐小时</span></div>
+          </div>
+        </div>
+        <div class="glass src-card">
+          <div class="src-head"><h3>🌬️ Open-Meteo Weather</h3><span class="src-badge ok">已接入</span></div>
+          <div class="src-provider">api.open-meteo.com</div>
+          <div class="src-rows">
+            <div class="src-row"><span class="sr-k">风速 / 风向</span><span class="sr-v">逐小时</span></div>
+            <div class="src-row"><span class="sr-k">气温</span><span class="sr-v">逐小时</span></div>
+            <div class="src-row"><span class="sr-k">海平面气压</span><span class="sr-v">逐小时</span></div>
+            <div class="src-row"><span class="sr-k">降水 / 云量 / 湿度</span><span class="sr-v">逐小时</span></div>
+          </div>
+        </div>
+        <div class="glass src-card">
+          <div class="src-head"><h3>🐟 World Bank Open Data</h3><span class="src-badge ok">已接入</span></div>
+          <div class="src-provider">api.worldbank.org</div>
+          <div class="src-rows">
+            <div class="src-row"><span class="sr-k">渔业总产量</span><span class="sr-v">年度</span></div>
+            <div class="src-row"><span class="sr-k">海洋捕捞产量</span><span class="sr-v">年度</span></div>
+            <div class="src-row"><span class="sr-k">水产养殖产量</span><span class="sr-v">年度</span></div>
+            <div class="src-row"><span class="sr-k">统计区间</span><span class="sr-v">2000 – 2024</span></div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
   <!-- /view-pipeline -->
 
-  <!-- ============ 视图三：预警预报 ============ -->
+  <!-- ============ 视图三：多源数据 ============ -->
+  <div class="view" id="view-sources">
+    <div class="page-scroll">
+      <div class="page-head">
+        <h2>🐟 海洋与渔业多源数据</h2>
+        <p>实时调用三个外部数据源：海洋要素（海浪/海流）、气象要素（风/气压/降水）、渔业产量统计，并生成渔业作业适宜度评估。</p>
+      </div>
+
+      <div class="forecast-toolbar">
+        <label>选择海域：</label>
+        <select id="srcStation" class="fc-select" onchange="loadSources()"></select>
+        <span class="src-fetched" id="srcFetchedAt">—</span>
+      </div>
+
+      <!-- 渔业作业适宜度 -->
+      <div class="suit-banner glass" id="suitBanner">
+        <div class="suit-main">
+          <div class="suit-label">渔业作业适宜度</div>
+          <div class="suit-value" id="suitOverall">—</div>
+        </div>
+        <div class="suit-detail">
+          <div class="suit-item"><span>海况等级</span><b id="suitSea">—</b></div>
+          <div class="suit-item"><span>风力等级</span><b id="suitWind">—</b></div>
+        </div>
+        <div class="suit-advice" id="suitAdvice">加载中…</div>
+      </div>
+
+      <!-- 三个数据源 -->
+      <div class="src-grid">
+        <div class="glass src-card">
+          <div class="src-head">
+            <h3>🌊 海洋要素</h3>
+            <span class="src-badge" id="badgeMarine">—</span>
+          </div>
+          <div class="src-provider">Open-Meteo Marine API</div>
+          <div class="src-rows" id="marineRows"></div>
+        </div>
+
+        <div class="glass src-card">
+          <div class="src-head">
+            <h3>🌬️ 气象要素</h3>
+            <span class="src-badge" id="badgeWeather">—</span>
+          </div>
+          <div class="src-provider">Open-Meteo Weather API</div>
+          <div class="src-rows" id="weatherRows"></div>
+        </div>
+
+        <div class="glass src-card">
+          <div class="src-head">
+            <h3>🐟 渔业产量</h3>
+            <span class="src-badge" id="badgeFishery">—</span>
+          </div>
+          <div class="src-provider">World Bank Open Data · 中国</div>
+          <div class="src-rows" id="fisheryRows"></div>
+        </div>
+      </div>
+
+      <h3 class="sec-title">📉 未来 24 小时海浪与风速</h3>
+      <div class="glass fc-chart-box">
+        <div class="chart-inner" id="srcChart" style="height:240px;"></div>
+      </div>
+    </div>
+  </div>
+  <!-- /view-sources -->
+
+  <!-- ============ 视图四：预警预报 ============ -->
   <div class="view" id="view-forecast">
     <div class="page-scroll">
       <div class="page-head">
@@ -1330,6 +1490,8 @@ function switchView(name) {
 
   if (name === 'pipeline') {
     loadPipeline();
+  } else if (name === 'sources') {
+    loadSources();
   } else if (name === 'forecast') {
     loadForecast();
   } else if (name === 'overview') {
@@ -1453,6 +1615,166 @@ function renderForecastTable() {
   }).join('');
 }
 
+// ------------------------------------------------------------
+// 多源数据（海洋 / 气象 / 渔业）
+// ------------------------------------------------------------
+let srcChart = null;
+let fisheryLoaded = false;
+
+async function loadSources() {
+  const sel = document.getElementById('srcStation');
+  // 首次进入：填充海域下拉
+  if (sel && sel.options.length === 0) {
+    if (stationsData && stationsData.length) {
+      sel.innerHTML = stationsData.map(s =>
+        '<option value="' + s.id + '">' + s.name + '</option>'
+      ).join('');
+    } else {
+      try {
+        const ov = await (await fetch('/api/overview')).json();
+        stationsData = ov;
+        sel.innerHTML = ov.map(s => '<option value="' + s.id + '">' + s.name + '</option>').join('');
+      } catch(e) {}
+    }
+  }
+  const sid = sel && sel.value ? sel.value : '1';
+
+  try {
+    const d = await (await fetch('/api/sources/' + sid)).json();
+    renderSources(d);
+  } catch(e) {
+    console.error('多源数据加载失败', e);
+  }
+
+  if (!fisheryLoaded) {
+    fisheryLoaded = true;
+    loadFishery();
+  }
+}
+
+function _fmt(v, unit, digits) {
+  if (v === null || v === undefined) return '—';
+  const n = (digits === undefined) ? v : Number(v).toFixed(digits);
+  return n + '<small>' + (unit || '') + '</small>';
+}
+
+function _badge(el, ok) {
+  if (!el) return;
+  el.textContent = ok ? '已连接' : '连接失败';
+  el.className = 'src-badge ' + (ok ? 'ok' : 'fail');
+}
+
+function renderSources(d) {
+  // 适宜度横幅
+  const banner = document.getElementById('suitBanner');
+  const suit = d.suitability || {};
+  if (banner) {
+    banner.className = 'suit-banner glass ' + (suit.overall_color || 'muted');
+  }
+  const set = (id, html) => { const e = document.getElementById(id); if (e) e.innerHTML = html; };
+  set('suitOverall', suit.overall || '—');
+  set('suitSea', (suit.sea_state && suit.sea_state.level) || '—');
+  set('suitWind', (suit.wind_state && suit.wind_state.level) || '—');
+  set('suitAdvice', suit.advice || '暂无评估。');
+  set('srcFetchedAt', '数据获取时间：' + (d.fetched_at || '—').replace('T', ' '));
+
+  const m = d.marine || {};
+  const w = d.weather || {};
+  _badge(document.getElementById('badgeMarine'), m.ok);
+  _badge(document.getElementById('badgeWeather'), w.ok);
+
+  // 海洋要素
+  set('marineRows',
+    row('海表温度 SST', _fmt(m.sst && m.sst.now, '℃', 1)) +
+    row('浪高', _fmt(m.wave_height && m.wave_height.now, 'm', 2)) +
+    row('浪周期', _fmt(m.wave_period && m.wave_period.now, 's', 1)) +
+    row('涌浪高度', _fmt(m.swell_wave_height && m.swell_wave_height.now, 'm', 2)) +
+    row('海流速度', _fmt(m.current_velocity && m.current_velocity.now, 'km/h', 1)) +
+    row('24h 最大浪高', _fmt(m.wave_height && m.wave_height.max, 'm', 2))
+  );
+
+  // 气象要素
+  set('weatherRows',
+    row('气温', _fmt(w.air_temp && w.air_temp.now, '℃', 1)) +
+    row('风速', _fmt(w.wind_speed && w.wind_speed.now, 'km/h', 1)) +
+    row('24h 最大风速', _fmt(w.wind_speed && w.wind_speed.max, 'km/h', 1)) +
+    row('气压', _fmt(w.pressure && w.pressure.now, 'hPa', 1)) +
+    row('降水', _fmt(w.precipitation && w.precipitation.now, 'mm', 1)) +
+    row('相对湿度', _fmt(w.humidity && w.humidity.now, '%', 0))
+  );
+
+  // 24h 时序图
+  const tl = d.timeline || {};
+  const el = document.getElementById('srcChart');
+  if (el && tl.times && tl.times.length) {
+    if (!srcChart) srcChart = echarts.init(el);
+    const labels = tl.times.map(t => String(t).substring(11, 16));
+    srcChart.setOption({
+      ...chartDark,
+      grid: { top: 36, right: 52, bottom: 30, left: 46 },
+      legend: {
+        data: ['浪高 (m)', '风速 (km/h)'], top: 0, right: 0,
+        textStyle: { color: '#89a4c7', fontSize: 11 }, itemWidth: 14, itemHeight: 3,
+      },
+      tooltip: {
+        trigger: 'axis', backgroundColor: 'rgba(8,24,58,0.95)',
+        borderColor: 'rgba(64,158,255,0.3)', textStyle: { color: '#e8f0fe', fontSize: 12 },
+      },
+      xAxis: { ...chartDark.xAxis, type: 'category', data: labels, boundaryGap: false },
+      yAxis: [
+        { ...chartDark.yAxis, type: 'value', name: 'm', scale: true },
+        { ...chartDark.yAxis, type: 'value', name: 'km/h', scale: true, splitLine: { show: false } },
+      ],
+      series: [
+        {
+          name: '浪高 (m)', type: 'line', smooth: true, symbol: 'none',
+          data: tl.wave_height, lineStyle: { color: '#3b9eff', width: 2.5 },
+          areaStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: 'rgba(59,158,255,0.28)' },
+              { offset: 1, color: 'rgba(59,158,255,0.02)' },
+            ]),
+          },
+        },
+        {
+          name: '风速 (km/h)', type: 'line', smooth: true, symbol: 'none', yAxisIndex: 1,
+          data: tl.wind_speed, lineStyle: { color: '#ffa940', width: 2 },
+        },
+      ],
+    });
+    srcChart.resize();
+  }
+}
+
+function row(k, v) {
+  return '<div class="src-row"><span class="sr-k">' + k + '</span><span class="sr-v">' + v + '</span></div>';
+}
+
+async function loadFishery() {
+  const box = document.getElementById('fisheryRows');
+  const badge = document.getElementById('badgeFishery');
+  try {
+    const d = await (await fetch('/api/fishery')).json();
+    _badge(badge, d.ok);
+    const series = d.series || [];
+    if (!series.length) {
+      box.innerHTML = row('状态', '暂无数据');
+      return;
+    }
+    // 单位换算：吨 → 万吨
+    box.innerHTML = series.map(s => {
+      const latest = s.latest;
+      if (!latest) return row(s.label, '—');
+      const wan = (latest.value / 10000).toFixed(1);
+      return row(s.label + '（' + latest.year + '）', wan + '<small>万吨</small>');
+    }).join('') + '<div class="src-row"><span class="sr-k">统计区间</span><span class="sr-v">2000 – 2024</span></div>';
+  } catch(e) {
+    _badge(badge, false);
+    if (box) box.innerHTML = row('状态', '加载失败');
+  }
+}
+
+
 // ============================================================
 // 启动
 // ============================================================
@@ -1465,7 +1787,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 window.addEventListener('resize', () => {
-  trendChart?.resize(); compareChart?.resize(); map?.invalidateSize(); fcChart?.resize();
+  trendChart?.resize(); compareChart?.resize(); map?.invalidateSize();
+  fcChart?.resize(); srcChart?.resize();
 });
 </script>
 
