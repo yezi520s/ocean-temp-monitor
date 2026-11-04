@@ -35,27 +35,26 @@
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  background: var(--bg-deep);
+  background: radial-gradient(ellipse at 50% 0%, #0a1e3d 0%, #020b1a 70%);
   color: var(--text-primary);
   min-height: 100vh;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
 }
 
-/* ====== Canvas 水下世界背景 ====== */
-#oceanCanvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
-
 /* ====== 主容器层级 ====== */
-.app { position: relative; z-index: 1; }
+.app {
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column;
+  height: 100vh; overflow: hidden;
+}
 
 /* ====== 顶部栏 ====== */
 .header {
   position: relative; z-index: 10;
   padding: 18px 32px;
   display: flex; align-items: center; justify-content: space-between;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  background: rgba(8, 20, 50, 0.7);
+  background: rgba(8, 20, 50, 0.92);
   border-bottom: 1px solid rgba(64, 158, 255, 0.1);
 }
 .header-brand { display: flex; align-items: center; gap: 14px; }
@@ -124,13 +123,12 @@ body {
   display: grid;
   grid-template-columns: 1fr 340px;
   gap: 20px; padding: 20px;
-  height: calc(100vh - 94px);
+  flex: 1; min-height: 0;
 }
 
 /* ====== 玻璃拟态面板 ====== */
 .glass {
-  background: var(--bg-panel);
-  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  background: rgba(8, 24, 58, 0.85);
   border: 1px solid var(--border-glass);
   border-radius: var(--radius-lg);
   box-shadow: 0 8px 32px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.03);
@@ -172,10 +170,9 @@ body {
 
 /* ====== 地图容器 ====== */
 .map-wrap {
-  flex: 1; overflow: hidden; position: relative;
+  flex: 1; min-height: 0; overflow: hidden; position: relative;
   border-radius: var(--radius-lg);
-  background: var(--bg-panel);
-  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  background: rgba(8, 24, 58, 0.85);
   border: 1px solid var(--border-glass);
   box-shadow: 0 8px 32px rgba(0,0,0,0.2);
 }
@@ -203,10 +200,10 @@ body {
 }
 
 /* ====== 右侧面板 ====== */
-.side-panel { display: flex; flex-direction: column; gap: 16px; }
+.side-panel { display: flex; flex-direction: column; gap: 16px; min-height: 0; }
 
 /* 预警报告面板 */
-.report-section { padding: 20px; }
+.report-section { padding: 20px; flex: 0 0 auto; max-height: 45%; overflow-y: auto; }
 .report-section h3 {
   font-size: 15px; font-weight: 700; margin-bottom: 12px;
   display: flex; align-items: center; gap: 8px; color: var(--text-primary);
@@ -235,7 +232,7 @@ body {
 .rs-level.danger { background: rgba(255,71,87,0.2); color: var(--red); }
 
 /* 告警面板 */
-.alert-section { padding: 20px; flex: 1; overflow-y: auto; }
+.alert-section { padding: 20px; flex: 1 1 120px; overflow-y: auto; min-height: 80px; }
 .alert-section h3 {
   font-size: 15px; font-weight: 700; margin-bottom: 16px;
   display: flex; align-items: center; gap: 8px; color: var(--text-primary);
@@ -275,7 +272,7 @@ body {
 }
 
 /* 站点列表 */
-.station-section { padding: 20px; }
+.station-section { padding: 20px; overflow-y: auto; flex: 1 1 120px; }
 .station-section h3 { font-size: 15px; font-weight: 700; margin-bottom: 14px; color: var(--text-primary); }
 .station-row {
   display: flex; align-items: center; gap: 12px; padding: 12px 14px;
@@ -302,11 +299,14 @@ body {
 /* ====== 底部图表 ====== */
 .charts-row {
   display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
-  margin: 0 20px 20px;
+  margin: 0 20px 12px;
+  flex-shrink: 0;
 }
 .chart-box {
-  padding: 18px; height: 240px;
+  padding: 14px 18px; height: 200px;
+  display: flex; flex-direction: column;
 }
+.chart-box .chart-inner { flex: 1; min-height: 0; width: 100%; }
 .chart-box h3 {
   font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px;
   display: flex; align-items: center; gap: 6px;
@@ -318,8 +318,7 @@ body {
   display: flex; justify-content: space-between; align-items: center;
   padding: 8px 24px; font-size: 11px; color: var(--text-muted);
   border-top: 1px solid rgba(255,255,255,0.04);
-  background: rgba(8, 20, 50, 0.5);
-  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  background: rgba(8, 20, 50, 0.85);
 }
 .footer-bar .live-dot {
   display: inline-block; width: 7px; height: 7px; border-radius: 50%;
@@ -338,13 +337,14 @@ body {
 .toast {
   position: fixed; top: 24px; right: 24px; z-index: 9999;
   padding: 14px 24px; border-radius: 12px; font-size: 14px; font-weight: 500;
-  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255,255,255,0.1);
   animation: toastIn 0.4s ease-out, toastOut 0.3s 2.5s ease-in forwards;
   box-shadow: 0 12px 40px rgba(0,0,0,0.4);
 }
 .toast.success { background: rgba(0,227,150,0.12); color: var(--green); border-color: rgba(0,227,150,0.25); }
 .toast.error { background: rgba(255,71,87,0.12); color: var(--red); border-color: rgba(255,71,87,0.25); }
+.toast.info { background: rgba(59,158,255,0.12); color: var(--blue-light); border-color: rgba(59,158,255,0.25); }
+.toast.warning { background: rgba(255,169,64,0.12); color: var(--orange); border-color: rgba(255,169,64,0.25); }
 @keyframes toastIn { from { opacity: 0; transform: translateX(60px); } to { opacity: 1; transform: translateX(0); } }
 @keyframes toastOut { to { opacity: 0; transform: translateY(-20px); } }
 
@@ -365,9 +365,6 @@ body {
 </head>
 <body>
 
-<!-- 水下世界背景 -->
-<canvas id="oceanCanvas"></canvas>
-
 <!-- 主应用 -->
 <div class="app">
 
@@ -377,7 +374,7 @@ body {
       <div class="header-icon">🌊</div>
       <div class="header-title">
         <h1>海洋温度异常预警监测平台</h1>
-        <span>Ocean Temperature Anomaly Detection System</span>
+        <span>辽宁理工学院</span>
       </div>
     </div>
     <div class="header-right">
@@ -396,7 +393,7 @@ body {
   <!-- 主内容区 -->
   <div class="main-grid">
     <!-- 左侧 -->
-    <div style="display:flex;flex-direction:column;gap:16px;">
+    <div class="left-column" style="display:flex;flex-direction:column;gap:16px;min-height:0;">
       <!-- 四张统计卡片 -->
       <div class="stat-row">
         <div class="stat-card glass">
@@ -468,11 +465,11 @@ body {
   <div class="charts-row">
     <div class="chart-box glass">
       <h3>📈 七日温度趋势<span class="chart-sub" id="chartSub">— 点击地图站点查看详情</span></h3>
-      <div id="chartTrend" style="width:100%;height:200px;"></div>
+      <div class="chart-inner" id="chartTrend"></div>
     </div>
     <div class="chart-box glass">
       <h3>📊 全海域温度对比</h3>
-      <div id="chartCompare" style="width:100%;height:200px;"></div>
+      <div class="chart-inner" id="chartCompare"></div>
     </div>
   </div>
 
@@ -490,205 +487,8 @@ body {
 </div>
 
 <script>
-// APP_VERSION: 2026.11.01-r6
-const APP_VERSION = '2026.11.01-r6';
-// ============================================================
-// Canvas 水下世界引擎 — 光柱 / 鱼群 / 浮游生物 / 海底光斑
-// ============================================================
-;(function() {
-  const c = document.getElementById('oceanCanvas');
-  console.log('🌊 Ocean Monitor r6 loaded');
-  const ctx = c.getContext('2d');
-  let W, H, midX, midY;
-  let tick = 0, mouseX = -400, mouseY = -400;
-
-  function resize() { W = c.width = window.innerWidth; H = c.height = window.innerHeight; midX = W / 2; midY = H / 2; }
-  resize(); window.addEventListener('resize', resize);
-  document.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
-  document.addEventListener('mouseleave', () => { mouseX = -400; mouseY = -400; });
-
-  // ---- 海底光柱 (Caustics / God rays) ----
-  const beams = Array.from({length: 5}, (_,i) => ({
-    x: W * (0.1 + i * 0.2),
-    width: 60 + Math.random() * 120,
-    speed: 0.3 + Math.random() * 0.5,
-    phase: Math.random() * Math.PI * 2,
-    alpha: 0.03 + Math.random() * 0.04,
-  }));
-
-  function drawBeams() {
-    beams.forEach(b => {
-      b.x += (Math.sin(tick * 0.004 + b.phase) * 0.3);
-      if (b.x > W + 200) b.x = -200;
-      if (b.x < -200) b.x = W + 200;
-      const grad = ctx.createLinearGradient(b.x, 0, b.x, H);
-      grad.addColorStop(0, `rgba(80,180,255,${b.alpha * 1.8})`);
-      grad.addColorStop(0.35, `rgba(80,180,255,${b.alpha})`);
-      grad.addColorStop(1, 'rgba(80,180,255,0)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(b.x - b.width / 2, 0, b.width, H);
-    });
-  }
-
-  // ---- 鱼群 ----
-  const fishes = [];
-  for (let i = 0; i < 22; i++) {
-    fishes.push({
-      x: Math.random() * W, y: 60 + Math.random() * (H - 120),
-      size: 4 + Math.random() * 10,
-      vx: 0.3 + Math.random() * 1.2 * (Math.random() > 0.5 ? 1 : -1),
-      vy: (Math.random() - 0.5) * 0.4,
-      wave: Math.random() * Math.PI * 2,
-      waveSpeed: 0.01 + Math.random() * 0.03,
-      color: Math.random() > 0.5 ? 'rgba(59,158,255,ALPHA)' : 'rgba(94,184,255,ALPHA)',
-    });
-  }
-  // Ensure direction balance
-  fishes.forEach(f => { if (f.vx < 0) f.vx *= -1; });
-  for (let i = 0; i < 5; i++) fishes[Math.floor(Math.random()*fishes.length)].vx *= -1;
-
-  function drawFish(f, ax, ay) {
-    const alpha = 0.3 + 0.15 * Math.sin(tick * 0.02 + f.wave);
-    ctx.save();
-    ctx.translate(ax, ay);
-    const dir = f.vx > 0 ? 1 : -1;
-    ctx.scale(dir, 1);
-    ctx.fillStyle = f.color.replace('ALPHA', alpha.toFixed(2));
-    ctx.beginPath();
-    const s = f.size;
-    // Streamlined fish body
-    ctx.moveTo(s * 1.1, 0);           // nose
-    ctx.bezierCurveTo(s * 0.5, -s * 0.45, -s * 0.5, -s * 0.35, -s * 0.7, -s * 0.05);
-    ctx.lineTo(-s * 0.7, s * 0.05);
-    ctx.bezierCurveTo(-s * 0.5, s * 0.35, s * 0.5, s * 0.45, s * 1.1, 0);
-    ctx.fill();
-    // Tail
-    ctx.fillStyle = f.color.replace('ALPHA', (alpha * 0.6).toFixed(2));
-    ctx.beginPath();
-    ctx.moveTo(-s * 0.6, -s * 0.05);
-    ctx.lineTo(-s * 1.1, -s * 0.5);
-    ctx.lineTo(-s * 1.1, s * 0.5);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-  }
-
-  function updateFishes() {
-    fishes.forEach(f => {
-      f.x += f.vx;
-      f.y += Math.sin(tick * f.waveSpeed + f.wave) * 0.25;
-      // Bounce at edges
-      if (f.x > W + 40) f.x = -40;
-      if (f.x < -40) f.x = W + 40;
-      if (f.y > H - 40) f.vy = -Math.abs(f.vy);
-      if (f.y < 40) f.vy = Math.abs(f.vy);
-      f.y += f.vy;
-      // React to mouse
-      const dist = Math.hypot(f.x - mouseX, f.y - mouseY);
-      if (dist < 150) {
-        const angle = Math.atan2(f.y - mouseY, f.x - mouseX);
-        f.vx += Math.cos(angle) * 0.2;
-        f.vy += Math.sin(angle) * 0.1;
-        const spd = Math.hypot(f.vx, f.vy);
-        if (spd > 2) { f.vx = (f.vx / spd) * 2; f.vy = (f.vy / spd) * 2; }
-      } else {
-        f.vx += (f.vx > 0 ? 0.01 : -0.01) * 0.05; // gentle return to cruise
-      }
-    });
-  }
-
-  // ---- 浮游生物 / 微光粒子 ----
-  const plankton = Array.from({length: 40}, () => ({
-    x: Math.random() * W, y: Math.random() * H,
-    r: 0.5 + Math.random() * 2.5,
-    rise: 0.1 + Math.random() * 0.5,
-    sway: Math.random() * Math.PI * 2,
-    swaySpeed: 0.005 + Math.random() * 0.02,
-    alpha: 0.15 + Math.random() * 0.5,
-    pulse: Math.random() * Math.PI * 2,
-    pulseSpeed: 0.02 + Math.random() * 0.04,
-  }));
-
-  function updatePlankton() {
-    plankton.forEach(p => {
-      p.y -= p.rise;
-      p.x += Math.sin(tick * p.swaySpeed + p.sway) * 0.4;
-      if (p.y < -10) { p.y = H + 10; p.x = Math.random() * W; }
-      if (p.x > W + 10) p.x = -10;
-      if (p.x < -10) p.x = W + 10;
-      const a = p.alpha * (0.6 + 0.4 * Math.sin(tick * p.pulseSpeed + p.pulse));
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(140,210,255,${a.toFixed(2)})`;
-      ctx.fill();
-      // Tiny glow
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r * 2.5, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(140,210,255,${(a*0.25).toFixed(3)})`;
-      ctx.fill();
-    });
-  }
-
-  // ---- 海底深度渐变 ----
-  function drawDepth() {
-    const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, 'rgba(2,11,26,0)');
-    g.addColorStop(0.3, 'rgba(2,11,26,0.15)');
-    g.addColorStop(0.7, 'rgba(2,14,37,0.6)');
-    g.addColorStop(1, 'rgba(2,11,26,0.95)');
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-  }
-
-  // ---- 海面波纹光效 ----
-  function drawSurfaceRipples() {
-    for (let i = 0; i < 6; i++) {
-      const rx = (i * W * 0.18 + tick * 0.3) % (W + 200) - 100;
-      const ry = 20 + Math.sin(tick * 0.02 + i) * 15;
-      const g = ctx.createRadialGradient(rx, ry, 0, rx, ry, 180);
-      g.addColorStop(0, 'rgba(100,200,255,0.06)');
-      g.addColorStop(1, 'rgba(100,200,255,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(rx - 180, ry - 180, 360, 360);
-    }
-  }
-
-  // ---- 海底泥沙/地形暗示光斑 ----
-  function drawSeabed() {
-    for (let i = 0; i < 8; i++) {
-      const bx = (i * W * 0.14 + Math.sin(tick * 0.005 + i * 1.7) * 60) % (W + 300) - 150;
-      const by = H - 40 - Math.random() * 40;
-      const g = ctx.createRadialGradient(bx, by, 0, bx, by, 160);
-      g.addColorStop(0, 'rgba(20,80,140,0.08)');
-      g.addColorStop(1, 'rgba(20,80,140,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(bx - 160, by - 160, 320, 320);
-    }
-  }
-
-  // ---- 主循环 ----
-  function loop() {
-    tick++;
-    ctx.clearRect(0, 0, W, H);
-
-    // 底色
-    ctx.fillStyle = '#020b1a';
-    ctx.fillRect(0, 0, W, H);
-
-    drawSeabed();
-    drawBeams();
-    drawSurfaceRipples();
-
-    updateFishes();
-    fishes.forEach(f => drawFish(f, f.x, f.y));
-
-    updatePlankton();
-    drawDepth();
-
-    requestAnimationFrame(loop);
-  }
-
-  loop();
-})();
+// APP_VERSION: 2026.11.03-r7
+const APP_VERSION = '2026.11.03-r7';
 
 // ============================================================
 // 全局状态
@@ -698,6 +498,13 @@ let stationsData = [];
 let trendChart, compareChart;
 let map, markers = {};
 let prevAlertCount = 0;
+
+// ============================================================
+// 工具函数
+// ============================================================
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 // ============================================================
 // Toast 通知

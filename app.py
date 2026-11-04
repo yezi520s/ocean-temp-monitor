@@ -102,10 +102,13 @@ def create_app():
     @app.route("/api/sst/<int:station_id>", methods=["GET"])
     def sst(station_id):
         hours = request.args.get("hours", 168, type=int)
+        # 只取「过去 N 小时」的实测/历史数据，不含未来预报（趋势图应展示真实历史）
         rows = query_all(
             """
             SELECT timestamp, temperature FROM sst_data
-            WHERE station_id = ? AND timestamp >= datetime('now', ?)
+            WHERE station_id = ?
+              AND timestamp <= datetime('now')
+              AND timestamp >= datetime('now', ?)
             ORDER BY timestamp
             """,
             (station_id, f"-{hours} hours"),

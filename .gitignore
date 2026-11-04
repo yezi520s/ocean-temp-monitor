@@ -1,6 +1,6 @@
-# 数据库文件
-ocean_data.db
-*.db
+# 数据库文件（已提交到仓库用于部署）
+# ocean_data.db
+# *.db
 
 # Python 缓存
 __pycache__/

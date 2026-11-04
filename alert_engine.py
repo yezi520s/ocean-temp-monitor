@@ -187,11 +187,27 @@ def _value_at_or_before(series, dt_target, tolerance_hours=6):
     return None
 
 
-def _latest_point(series):
+def _latest_point(series, as_of=None):
+    """取「不超过 as_of（默认当前时刻）」的最新数据点。
+
+    关键：Open-Meteo 返回「历史 + 未来预报」，序列最后一条是未来预报值。
+    预警检测必须锚定「现在及过去」，否则会把未来预报当成当前温度。
+    """
     if not series:
         return None, None
-    ts, temp = series[-1]
-    return datetime.fromisoformat(ts), temp
+    as_of = as_of or datetime.now()
+    best_ts = None
+    best_temp = None
+    for ts, temp in series:
+        try:
+            t = datetime.fromisoformat(ts)
+        except ValueError:
+            continue
+        if t <= as_of:
+            if best_ts is None or t > best_ts:
+                best_ts = t
+                best_temp = temp
+    return (best_ts, best_temp) if best_ts is not None else (None, None)
 
 
 # ---------------------------------------------------------------------------
@@ -206,7 +222,10 @@ def evaluate_station(station, save=True):
     if len(series) < 2:
         return [], 0, "normal", "正常", {"current": None}
 
+    # 锚定「现在及过去」的最新点，而非未来预报
     current_dt, current = _latest_point(series)
+    if current_dt is None:
+        return [], 0, "normal", "正常", {"current": None}
     target_time = _iso(current_dt)
 
     prev_24h = _value_at_or_before(series, current_dt - timedelta(hours=24))
