@@ -11,7 +11,7 @@ from datetime import datetime
 from flask import Flask, jsonify, request, render_template
 
 import config
-from database import init_db, query_all, get_conn
+from database import init_db, query_all, get_conn, query_one
 from sync_service import sync_all, has_historical_baseline, latest_data_span
 from alert_engine import evaluate_all, evaluate_station
 from report_service import generate_report, latest_report
@@ -192,6 +192,78 @@ def create_app():
     # ------------------------------------------------------------------
     # 数据新鲜度
     # ------------------------------------------------------------------
+    @app.route("/api/station/<int:station_id>/detail", methods=["GET"])
+    def station_detail(station_id):
+        """返回单个站点详细信息（统计指标 + 海洋知识卡片）。"""
+        station = config.STATION_BY_ID.get(station_id)
+        if not station:
+            return jsonify({"error": "未知站点"}), 404
+
+        # 当前与近期统计
+        current_row = query_one(
+            """SELECT temperature FROM sst_data
+               WHERE station_id = ? AND timestamp <= datetime('now')
+               ORDER BY timestamp DESC LIMIT 1""",
+            (station_id,),
+        )
+        avg_24h = query_one(
+            """SELECT ROUND(AVG(temperature), 2) as v FROM sst_data
+               WHERE station_id = ? AND timestamp >= datetime('now', '-24 hours')""",
+            (station_id,),
+        )
+        avg_7d = query_one(
+            """SELECT ROUND(AVG(temperature), 2) as v FROM sst_data
+               WHERE station_id = ? AND timestamp >= datetime('now', '-7 days')""",
+            (station_id,),
+        )
+        max_7d = query_one(
+            """SELECT MAX(temperature) as v FROM sst_data
+               WHERE station_id = ? AND timestamp >= datetime('now', '-7 days')""",
+            (station_id,),
+        )
+        min_7d = query_one(
+            """SELECT MIN(temperature) as v FROM sst_data
+               WHERE station_id = ? AND timestamp >= datetime('now', '-7 days')""",
+            (station_id,),
+        )
+        yoy = query_one(
+            """SELECT ROUND(AVG(temperature), 2) as v FROM sst_data
+               WHERE station_id = ? AND timestamp >= datetime('now', '-380 days')
+                 AND timestamp <= datetime('now', '-350 days')""",
+            (station_id,),
+        )
+        # 警报统计
+        alert_count = query_one(
+            "SELECT COUNT(*) as v FROM alert_log WHERE station_name = ?",
+            (station["name"],),
+        )
+
+        # 告警与评分
+        alerts, score, level, label, metrics = evaluate_station(station, save=False)
+
+        # 海洋知识卡片
+        knowledge = OCEAN_KNOWLEDGE.get(station["name"], "")
+
+        return jsonify({
+            "id": station["id"],
+            "name": station["name"],
+            "region": station["region"],
+            "lat": station["lat"],
+            "lon": station["lon"],
+            "current_temp": current_row["temperature"] if current_row else None,
+            "avg_24h": avg_24h["v"] if avg_24h else None,
+            "avg_7d": avg_7d["v"] if avg_7d else None,
+            "max_7d": max_7d["v"] if max_7d else None,
+            "min_7d": min_7d["v"] if min_7d else None,
+            "yoy": yoy["v"] if yoy else None,
+            "score": score,
+            "level": level,
+            "label": label,
+            "alert_count": alert_count["v"] if alert_count else 0,
+            "active_alerts": [a["alert_type"] for a in alerts],
+            "knowledge": knowledge,
+        })
+
     @app.route("/api/status", methods=["GET"])
     def status():
         return jsonify({
@@ -202,7 +274,19 @@ def create_app():
     return app
 
 
-# 模块级应用实例（gunicorn 需要 app:app）
+# ======================================================================
+# 海洋知识卡片
+# ======================================================================
+OCEAN_KNOWLEDGE = {
+    "大连海域": "渤海是中国的半封闭内海，平均水深仅 18 米，水温受大陆气候影响显著，冬季近岸可出现海冰。大连海域是北黄海-渤海交汇处，夏季 SST 通常 22–26℃，冬季可降至 0–4℃，年较差达 25℃ 以上，为我国近海水温变幅最大区域。",
+    "青岛海域": "黄海西部受黄海暖流与沿岸流共同影响，青岛海域夏季表层水温约 23–27℃，冬季 5–8℃。该区域是黄海冷水团南缘，底层终年维持低温（<10℃），对渔业资源分布有重要影响。",
+    "连云港海域": "连云港地处海州湾顶，水深较浅（<20 米），海水对流混合充分。该海域水温季节性强，易受陆地径流及苏北沿岸流影响，夏季高温可达 28–30℃，是赤潮高发区之一。",
+    "舟山海域": "舟山群岛位于长江口南翼，受长江冲淡水、台湾暖流及浙闽沿岸流三重影响，水文环境极其复杂。舟山渔场是中国最大近海渔场，海温异常直接影响带鱼、大黄鱼等经济鱼类的洄游路线与产卵时间。",
+    "厦门海域": "台湾海峡是东海与南海的水交换通道，厦门海域受黑潮分支（台湾暖流）影响，冬季水温仍可维持在 16–19℃。该海域潮差大、潮流强，是研究陆架-深海交换的热点区域。",
+    "珠江口海域": "珠江口是南海北部最大河口湾，冲淡水向外扩散形成低盐羽状锋。夏季 SST 常达 29–31℃，是全球海洋热浪的高风险区之一。海温升高会加剧珊瑚白化风险，影响大亚湾及香港周边海域生态系统。",
+    "三亚海域": "三亚海域属热带南海，终年高温，SST 年均约 26–28℃，季节变幅小于 6℃。该区域拥有丰富的珊瑚礁生态系统，对热应力极为敏感——当 SST 连续超过 30℃ 超过 4 周，珊瑚白化概率大幅上升。",
+    "西沙海域": "西沙群岛位于南海中部深水区，水深 1000–3000 米，是典型的大洋性岛礁海域。该区域 SST 年际波动与 ENSO（厄尔尼诺-南方涛动）密切相关，是监测热带海洋对全球气候响应的重要前哨。",
+}
 app = create_app()
 init_db()
 
