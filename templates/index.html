@@ -582,14 +582,11 @@ function initMap() {
     center: [30, 118], zoom: 5, zoomControl: false, attributionControl: false,
   });
   L.control.zoom({ position: 'bottomright' }).addTo(map);
-  // ArcGIS 海洋底图（国内可达，主题契合）+ 海岸线/标注参考层
-  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}', {
+  // 高德中文地图（深色滤镜融入海洋主题）
+  L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+    subdomains: ['1','2','3','4'],
     maxZoom: 12,
-    attribution: '&copy; Esri, GEBCO, NOAA',
-  }).addTo(map);
-  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Reference/MapServer/tile/{z}/{y}/{x}', {
-    maxZoom: 12,
-    attribution: '&copy; Esri',
+    attribution: '&copy; 高德地图',
   }).addTo(map);
   // 地图染色：降低亮度 + 偏蓝 + 降低饱和度 → 融入深色海洋背景
   const mapStyle = document.createElement('style');
