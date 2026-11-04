@@ -264,6 +264,107 @@ def create_app():
             "knowledge": knowledge,
         })
 
+    # ------------------------------------------------------------------
+    # 数据链路（采集 / 处理 / 分析 / 预警预报）运行统计
+    # ------------------------------------------------------------------
+    @app.route("/api/pipeline", methods=["GET"])
+    def pipeline():
+        total = query_one("SELECT COUNT(*) AS v FROM sst_data")
+        hist = query_one("SELECT COUNT(*) AS v FROM sst_data WHERE timestamp <= datetime('now')")
+        fut = query_one("SELECT COUNT(*) AS v FROM sst_data WHERE timestamp > datetime('now')")
+        span = query_one("SELECT MIN(timestamp) AS lo, MAX(timestamp) AS hi FROM sst_data")
+        fetched = query_one("SELECT MAX(fetched_at) AS v FROM sst_data")
+        alerts = query_one("SELECT COUNT(*) AS v FROM alert_log")
+        stations = query_one("SELECT COUNT(DISTINCT station_id) AS v FROM sst_data")
+
+        # 日均数据点
+        days = 1
+        if span and span["lo"] and span["hi"]:
+            from datetime import datetime as _dt
+            try:
+                lo = _dt.fromisoformat(span["lo"])
+                hi = _dt.fromisoformat(span["hi"])
+                days = max(1, (hi - lo).days + 1)
+            except ValueError:
+                pass
+
+        return jsonify({
+            "total_records": total["v"] if total else 0,
+            "history_records": hist["v"] if hist else 0,
+            "forecast_records": fut["v"] if fut else 0,
+            "stations": stations["v"] if stations else 0,
+            "span_days": days,
+            "points_per_day": round((total["v"] if total else 0) / days, 1),
+            "alert_count": alerts["v"] if alerts else 0,
+            "last_fetched": fetched["v"] if fetched else None,
+            "span": {"min": span["lo"] if span else None, "max": span["hi"] if span else None},
+            "source": {
+                "name": "Open-Meteo Marine API",
+                "url": "https://marine-api.open-meteo.com/v1/marine",
+                "variable": "sea_surface_temperature（海表温度 SST）",
+                "frequency": "逐小时",
+                "timezone": "Asia/Shanghai",
+            },
+        })
+
+    # ------------------------------------------------------------------
+    # 预警预报：未来 7 天逐日海温预测
+    # ------------------------------------------------------------------
+    @app.route("/api/forecast", methods=["GET"])
+    def forecast():
+        station_id = request.args.get("station_id", type=int)
+        rows = query_all(
+            """
+            SELECT station_id, station_name, substr(timestamp, 1, 10) AS day,
+                   ROUND(AVG(temperature), 2) AS avg_t,
+                   ROUND(MAX(temperature), 2) AS max_t,
+                   ROUND(MIN(temperature), 2) AS min_t
+            FROM sst_data
+            WHERE timestamp > datetime('now')
+              AND timestamp <= datetime('now', '+7 days')
+              AND (? IS NULL OR station_id = ?)
+            GROUP BY station_id, day
+            ORDER BY station_id, day
+            """,
+            (station_id, station_id),
+        )
+
+        by_station = {}
+        for r in rows:
+            sid = r["station_id"]
+            by_station.setdefault(sid, {
+                "id": sid,
+                "name": r["station_name"],
+                "days": [],
+            })["days"].append({
+                "day": r["day"],
+                "avg": r["avg_t"],
+                "max": r["max_t"],
+                "min": r["min_t"],
+            })
+
+        # 预报风险提示：均温 >= 30 或 <= 15 标记
+        result = []
+        for item in by_station.values():
+            item["days"].sort(key=lambda d: d["day"])
+            highs = [d["max"] for d in item["days"] if d["max"] is not None]
+            lows = [d["min"] for d in item["days"] if d["min"] is not None]
+            item["peak_max"] = max(highs) if highs else None
+            item["low_min"] = min(lows) if lows else None
+            if item["peak_max"] is not None and item["peak_max"] >= 30:
+                item["risk"] = "danger"
+                item["risk_label"] = "高温风险"
+            elif item["low_min"] is not None and item["low_min"] <= 15:
+                item["risk"] = "warning"
+                item["risk_label"] = "低温风险"
+            else:
+                item["risk"] = "normal"
+                item["risk_label"] = "平稳"
+            result.append(item)
+
+        result.sort(key=lambda x: x["id"])
+        return jsonify(result)
+
     @app.route("/api/status", methods=["GET"])
     def status():
         return jsonify({
