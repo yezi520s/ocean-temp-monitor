@@ -361,6 +361,51 @@ body {
   .charts-row { grid-template-columns: 1fr; }
   .side-panel { display: none; }
 }
+
+/* 平板 & 小屏 */
+@media (max-width: 768px) {
+  .header { padding: 12px 16px; flex-wrap: wrap; gap: 8px; }
+  .header-icon { width: 34px; height: 34px; border-radius: 10px; font-size: 18px; }
+  .header-title h1 { font-size: 16px; }
+  .header-title span { font-size: 10px; letter-spacing: 1px; }
+  .header-right { gap: 8px; }
+  .clock { padding: 6px 12px; font-size: 11px; }
+  .btn { padding: 8px 16px; font-size: 12px; }
+  .btn-text { display: none; } /* 按钮只留图标 */
+  .main-grid { padding: 12px; gap: 12px; }
+  .map-wrap { min-height: 320px; }
+  .charts-row { padding: 0 12px 12px; }
+  .chart-box { height: auto; min-height: 220px; }
+  .footer-bar { flex-wrap: wrap; gap: 6px; padding: 8px 16px; font-size: 10px; }
+  .toast { top: 12px; right: 12px; left: 12px; padding: 12px 18px; font-size: 13px; border-radius: 10px; }
+}
+
+/* 手机 */
+@media (max-width: 480px) {
+  .app { height: auto; min-height: 100dvh; overflow-y: auto; }
+  .header { padding: 10px 12px; }
+  .header-brand { gap: 8px; }
+  .header-icon { width: 28px; height: 28px; border-radius: 8px; font-size: 16px; }
+  .header-title h1 { font-size: 14px; letter-spacing: 0; }
+  .header-title span { display: none; }
+  .header-right { gap: 4px; }
+  .clock { display: none; }
+  .btn { padding: 7px 12px; font-size: 11px; border-radius: 18px; }
+  .btn-text { display: none; }
+  .main-grid { padding: 8px; gap: 8px; }
+  .stat-row { grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .stat-card { padding: 12px; }
+  .stat-value { font-size: 20px; }
+  .map-wrap { min-height: 260px; border-radius: var(--radius-md); }
+  .side-panel {
+    display: flex !important; flex-direction: column; gap: 10px;
+  }
+  .side-panel .glass { max-height: none; }
+  .charts-row { padding: 0 8px 8px; gap: 8px; }
+  .chart-box { min-height: 200px; border-radius: var(--radius-md); padding: 14px; }
+  .chart-box h3 { font-size: 12px; }
+  .footer-bar { flex-direction: column; align-items: flex-start; padding: 6px 12px; }
+}
 </style>
 </head>
 <body>
@@ -381,11 +426,11 @@ body {
       <div class="clock"><span class="dot"></span><span id="clockText">--</span></div>
       <button class="btn btn-secondary" onclick="refreshAll()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M3.5 15.5a9 9 0 1 0 3.2-10.3L1 10"/></svg>
-        同步最新数据
+        <span class="btn-text">同步最新数据</span>
       </button>
       <button class="btn btn-amber" onclick="runAnalysis()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/><path d="M12 3v3"/><path d="M4 2l4 8h8l4-8"/></svg>
-        执行智能分析
+        <span class="btn-text">执行智能分析</span>
       </button>
     </div>
   </header>
