@@ -11,6 +11,19 @@ import os
 # ---------------------------------------------------------------------------
 MARINE_API_URL = "https://marine-api.open-meteo.com/v1/marine"
 TIMEZONE = "Asia/Shanghai"
+# 数据所用时区相对 UTC 的偏移秒数（Asia/Shanghai = +8h）。
+# 服务器进程时区可能是 UTC，定位"当前时刻"必须按此偏移换算。
+TIMEZONE_UTC_OFFSET_SECONDS = 8 * 3600
+
+# ---------------------------------------------------------------------------
+# 外部实时接口（Open-Meteo Marine / Weather）调用参数
+# ---------------------------------------------------------------------------
+EXTERNAL_TIMEOUT = 6             # 单次请求超时（秒）
+EXTERNAL_RETRY_ATTEMPTS = 2      # 含首次在内的尝试次数
+EXTERNAL_BACKOFF_MAX = 1         # 退避上限（秒）
+EXTERNAL_RETRY_STATUS = (429, 500, 502, 503, 504)  # 可重试的上游状态码
+EXTERNAL_TTL_OK = 600            # 成功结果缓存（秒）
+EXTERNAL_TTL_FAIL = 60           # 失败结果负缓存（秒）：避免每请求都撞限流
 
 # 数据同步参数
 FORECAST_DAYS = 7            # 一键同步拉取未来 7 天逐时预报
@@ -49,6 +62,8 @@ ALERT_CONFIG = {
     "weekly_rise": 3.0,
     # ⑤ 同比异常：与去年同期温差绝对值超过该值触发
     "yoy_anomaly": 2.0,
+    # ⑥ 气候态距平：CRW 1985–2012 基线距平阈值
+    "clim_anomaly": 2.0,
 }
 
 # ---------------------------------------------------------------------------
@@ -59,7 +74,8 @@ SCORE_WEIGHTS = {
     "low_temp": 20,
     "daily_rise": 20,
     "weekly_rise": 20,
-    "yoy_anomaly": 20,
+    "yoy_anomaly": 10,
+    "clim_anomaly": 10,
 }
 
 # 风险等级判定（按总分）

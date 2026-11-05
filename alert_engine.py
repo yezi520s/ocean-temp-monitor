@@ -1,19 +1,34 @@
 # -*- coding: utf-8 -*-
 """
-预警引擎 —— 五维检测 + 综合评分。
+预警引擎 —— 六维检测 + 综合评分。
 
-五个维度：
-  ① 高温异常  ② 低温异常  ③ 日升幅  ④ 周升幅  ⑤ 同比异常
-每个维度独立判断是否触发，再按权重合成 0–100 的综合评分与风险等级。
+六个维度：
+  ① 高温异常  ② 低温异常  ③ 日升幅  ④ 周升幅  ⑤ CRW 气候态距平  ⑥ 同比异常（回退）
+其中 ⑤ / ⑥ 互斥：CRW 可用时用 30 年气候态基线，不可用时回退去年同日。
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import config
 from database import get_conn
 
+# 惰性导入 CRW 服务（避免循环导入，仅评估时加载）
+_crw = None
+
 
 def _iso(dt):
     return dt.isoformat()
+
+
+def _data_now():
+    """数据所用时区（config.TIMEZONE）的当前时刻，naive 形式。
+
+    库中 timestamp 由 Open-Meteo 按 Asia/Shanghai 标注（见 sync_service），
+    而服务器（Render 容器）进程时区是 UTC。若直接用 naive datetime.now()
+    与这些时间戳比较，会落后 8 小时，把 8 小时前的数据当成「当前温度」。
+    """
+    return datetime.now(
+        timezone(timedelta(seconds=config.TIMEZONE_UTC_OFFSET_SECONDS))
+    ).replace(tzinfo=None)
 
 
 def _level_for_score(score):
@@ -153,6 +168,36 @@ def _check_yoy(station, current, yoy_value, target_time, score_cfg):
     return None
 
 
+def _check_clim_anomaly(station, clim_anomaly, target_time, score_cfg):
+    """⑥ 气候态距平异常：基于 NOAA CRW 1985–2012 30 年气候态基线。
+
+    距平 ≥ ±2℃ 触发预警——30 年统计基线远比一年同日更可靠。
+    """
+    th = config.ALERT_CONFIG.get("clim_anomaly", 2.0)
+    if clim_anomaly is None:
+        return None
+    diff = abs(clim_anomaly)
+    if diff >= th:
+        direction = "偏暖" if clim_anomaly > 0 else "偏冷"
+        level = "danger" if diff >= th * 1.5 else "warning"
+        score = min(score_cfg, round(score_cfg * min(1.0, 0.5 + (diff - th) / th)))
+        return {
+            "station_id": station["id"],
+            "station_name": station["name"],
+            "alert_type": "气候态异常",
+            "dimension": "clim_anomaly",
+            "alert_level": level,
+            "message": f"SST 距平 {clim_anomaly:+.1f}℃ (相对 1985–2012 气候态)，"
+                       f"{direction}幅度超过阈值 {th}℃，"
+                       f"属 30 年统计基线下的异常信号",
+            "temperature": None,
+            "reference_value": clim_anomaly,
+            "target_time": target_time,
+            "score": score,
+        }
+    return None
+
+
 # ---------------------------------------------------------------------------
 # 数据查询辅助
 # ---------------------------------------------------------------------------
@@ -195,7 +240,7 @@ def _latest_point(series, as_of=None):
     """
     if not series:
         return None, None
-    as_of = as_of or datetime.now()
+    as_of = as_of or _data_now()
     best_ts = None
     best_temp = None
     for ts, temp in series:
@@ -213,10 +258,11 @@ def _latest_point(series, as_of=None):
 # ---------------------------------------------------------------------------
 # 引擎主入口
 # ---------------------------------------------------------------------------
-def evaluate_station(station, save=True):
-    """对单个站点做五维检测，返回 (alerts, score, level, label, metrics)。
+def evaluate_station(station, save=True, clim_anomaly=None):
+    """对单个站点做六维检测，返回 (alerts, score, level, label, metrics)。
 
     以该站点最新数据点为「当前」，回溯 24h / 7d / 去年同期作为对比基准。
+    优先使用 CRW 30 年气候态基线（clim_anomaly），不可用时回退到去年同日。
     """
     series = _station_series(station["id"])
     if len(series) < 2:
@@ -234,12 +280,15 @@ def evaluate_station(station, save=True):
     yoy_value = _value_at_or_before(series, yoy_dt, tolerance_hours=48)
 
     score_cfg = config.SCORE_WEIGHTS
+    # ①–④ 传统维度  +  ⑤/⑥：气候态基线优先，回退去年同日
     checks = [
         _check_high_temp(station, current, target_time, score_cfg["high_temp"]),
         _check_low_temp(station, current, target_time, score_cfg["low_temp"]),
         _check_daily_rise(station, current, prev_24h, target_time, score_cfg["daily_rise"]),
         _check_weekly_rise(station, current, prev_7d, target_time, score_cfg["weekly_rise"]),
-        _check_yoy(station, current, yoy_value, target_time, score_cfg["yoy_anomaly"]),
+        (_check_clim_anomaly(station, clim_anomaly, target_time, score_cfg["clim_anomaly"])
+         if clim_anomaly is not None
+         else _check_yoy(station, current, yoy_value, target_time, score_cfg["yoy_anomaly"])),
     ]
     alerts = [c for c in checks if c is not None]
 
@@ -258,6 +307,10 @@ def evaluate_station(station, save=True):
     if save and alerts:
         _save_alerts(alerts)
 
+    baseline_type = "YoY"
+    if clim_anomaly is not None:
+        baseline_type = "CRW 30y Climatology (1985-2012)"
+
     metrics = {
         "current": round(current, 2),
         "current_time": target_time,
@@ -265,6 +318,8 @@ def evaluate_station(station, save=True):
         "prev_7d": round(prev_7d, 2) if prev_7d is not None else None,
         "yoy": round(yoy_value, 2) if yoy_value is not None else None,
         "yoy_time": _iso(yoy_dt),
+        "clim_anomaly": round(clim_anomaly, 2) if clim_anomaly is not None else None,
+        "baseline_type": baseline_type,
     }
     return alerts, total, level, label, metrics
 
@@ -299,10 +354,27 @@ def _save_alerts(alerts):
 
 
 def evaluate_all(save=True):
-    """全站点五维评估，返回汇总 dict（供报告与 API 使用）。"""
+    """全站点六维评估，返回汇总 dict（供报告与 API 使用）。
+
+    CRW 气候态基线优先——从 crw_service 惰性加载距平数据；
+    若网络不可达则以 None 传入 evaluate_station，自动回退去年同日。
+    """
+    # 惰性加载 CRW 气候态距平（避免循环导入）
+    clim_map = {}
+    try:
+        global _crw
+        if _crw is None:
+            import importlib
+            _crw = importlib.import_module("crw_service")
+        clim_map = _crw.get_all_station_anomalies()
+    except Exception:
+        pass  # 网络不可达时全部回退 YoY
+
     results = []
     for station in config.MONITOR_STATIONS:
-        alerts, score, level, label, metrics = evaluate_station(station, save=save)
+        ca = clim_map.get(station["id"])
+        alerts, score, level, label, metrics = evaluate_station(
+            station, save=save, clim_anomaly=ca)
         results.append({
             "station": station,
             "alerts": alerts,

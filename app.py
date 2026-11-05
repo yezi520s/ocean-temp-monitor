@@ -7,7 +7,7 @@
 """
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import requests
 from flask import Flask, jsonify, request, render_template
@@ -17,6 +17,7 @@ from database import init_db, query_all, get_conn, query_one
 from sync_service import sync_all, has_historical_baseline, latest_data_span
 from alert_engine import evaluate_all, evaluate_station
 from report_service import generate_report, latest_report
+import crw_service
 
 
 # ======================================================================
@@ -27,19 +28,61 @@ _CACHE_LOCK = threading.Lock()
 
 
 def _cache_get(key, ttl):
-    """读取缓存；过期返回 None。"""
+    """读取缓存；过期返回 None。
+
+    条目自带 ttl 时优先用它（失败结果需要更短的 TTL），
+    否则沿用调用方传入的 ttl —— 保持 fishery 等旧调用方行为不变。
+    """
     with _CACHE_LOCK:
         item = _CACHE.get(key)
     if not item:
         return None
-    if time.time() - item["ts"] > ttl:
+    effective_ttl = item.get("ttl") if item.get("ttl") is not None else ttl
+    if time.time() - item["ts"] > effective_ttl:
         return None
     return item["data"]
 
 
-def _cache_set(key, data):
+def _cache_set(key, data, ttl=None):
+    """写入缓存；ttl=None 表示由读取方的 ttl 决定（旧行为）。"""
     with _CACHE_LOCK:
-        _CACHE[key] = {"ts": time.time(), "data": data}
+        _CACHE[key] = {"ts": time.time(), "data": data, "ttl": ttl}
+
+
+def _load_external(kind, station_id, lat, lon, fetch_fn):
+    """读取外部实时源，带负缓存与陈旧回退。
+
+    返回 (payload, meta)：
+      - payload：fetch 结果或最近一次成功结果（可能 hourly 为空）
+      - meta.stale=True 表示上游当前失败、正在回退旧数据
+      - meta.error  上游失败原因（成功时为 None）
+
+    负缓存（EXTERNAL_TTL_FAIL）让失败结果也占住缓存位，避免每个请求
+    都重新打上游、持续撞限流；成功结果同时写入长 TTL 的 *-ok 键，
+    供短时上游故障时回退。
+    """
+    key = f"{kind}:{station_id}"
+    ok_key = f"{kind}-ok:{station_id}"
+    cached = _cache_get(key, config.EXTERNAL_TTL_OK)
+    if cached is not None:
+        if cached.get("ok"):
+            return cached, {"stale": False, "error": None}
+        stale = _cache_get(ok_key, config.EXTERNAL_STALE_TTL)
+        if stale is not None:
+            return stale, {"stale": True, "error": cached.get("error")}
+        return cached, {"stale": False, "error": cached.get("error")}
+
+    result = fetch_fn(lat, lon)
+    if result.get("ok"):
+        _cache_set(key, result, ttl=config.EXTERNAL_TTL_OK)
+        _cache_set(ok_key, result, ttl=config.EXTERNAL_STALE_TTL)
+        return result, {"stale": False, "error": None}
+
+    _cache_set(key, result, ttl=config.EXTERNAL_TTL_FAIL)
+    stale = _cache_get(ok_key, config.EXTERNAL_STALE_TTL)
+    if stale is not None:
+        return stale, {"stale": True, "error": result.get("error")}
+    return result, {"stale": False, "error": result.get("error")}
 
 
 def _now_iso():
@@ -47,55 +90,73 @@ def _now_iso():
 
 
 # ---------------------------------------------------------------- 源 1
-def fetch_marine_live(lat, lon, forecast_days=2, timeout=18):
+def _fetch_hourly_api(url, variables, lat, lon, forecast_days, timeout):
+    """请求 Open-Meteo 类接口，返回 (payload, error)。
+
+    仅对限流/网关类状态码退避重试；4xx 参数错误不重试（重试也没用，
+    且会加剧限流）。总耗时受 EXTERNAL_TIMEOUT × EXTERNAL_RETRY_ATTEMPTS
+    + 退避约束，须远小于 gunicorn --timeout 120。
+    """
+    params = {
+        "latitude": lat, "longitude": lon,
+        "hourly": ",".join(variables),
+        "timezone": config.TIMEZONE,
+        "forecast_days": forecast_days,
+    }
+    last_error = None
+    for attempt in range(config.EXTERNAL_RETRY_ATTEMPTS):
+        try:
+            resp = requests.get(url, params=params, timeout=timeout)
+            if resp.status_code in config.EXTERNAL_RETRY_STATUS:
+                last_error = f"{resp.status_code} 上游限流/不可用"
+                if attempt < config.EXTERNAL_RETRY_ATTEMPTS - 1:
+                    time.sleep(min(config.EXTERNAL_BACKOFF_MAX,
+                                   0.5 * (2 ** attempt)))
+                continue
+            resp.raise_for_status()
+            return resp.json(), None
+        except requests.RequestException as exc:
+            last_error = str(exc)
+            if attempt < config.EXTERNAL_RETRY_ATTEMPTS - 1:
+                time.sleep(min(config.EXTERNAL_BACKOFF_MAX,
+                               0.5 * (2 ** attempt)))
+    return None, last_error
+
+
+def fetch_marine_live(lat, lon, forecast_days=2, timeout=None):
     """Open-Meteo Marine API —— 海浪 / 涌浪 / 海流 / 海表温度。"""
+    timeout = config.EXTERNAL_TIMEOUT if timeout is None else timeout
     variables = [
         "sea_surface_temperature",
         "wave_height", "wave_direction", "wave_period",
         "swell_wave_height", "swell_wave_period",
         "ocean_current_velocity", "ocean_current_direction",
     ]
-    try:
-        resp = requests.get(
-            config.MARINE_API_URL,
-            params={
-                "latitude": lat, "longitude": lon,
-                "hourly": ",".join(variables),
-                "timezone": config.TIMEZONE,
-                "forecast_days": forecast_days,
-            },
-            timeout=timeout,
-        )
-        resp.raise_for_status()
-        hourly = resp.json().get("hourly") or {}
-        return {"ok": True, "hourly": hourly}
-    except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "error": str(exc)}
+    payload, error = _fetch_hourly_api(
+        config.MARINE_API_URL, variables, lat, lon, forecast_days, timeout)
+    if payload is None:
+        return {"ok": False, "error": error}
+    hourly = payload.get("hourly") or {}
+    return {"ok": True, "hourly": hourly,
+            "utc_offset_seconds": payload.get("utc_offset_seconds")}
 
 
 # ---------------------------------------------------------------- 源 2
-def fetch_weather_live(lat, lon, forecast_days=2, timeout=18):
+def fetch_weather_live(lat, lon, forecast_days=2, timeout=None):
     """Open-Meteo Weather API —— 风 / 气温 / 气压 / 降水 / 云量 / 湿度。"""
+    timeout = config.EXTERNAL_TIMEOUT if timeout is None else timeout
     variables = [
         "temperature_2m", "wind_speed_10m", "wind_direction_10m",
         "surface_pressure", "precipitation", "cloud_cover", "relative_humidity_2m",
     ]
-    try:
-        resp = requests.get(
-            "https://api.open-meteo.com/v1/forecast",
-            params={
-                "latitude": lat, "longitude": lon,
-                "hourly": ",".join(variables),
-                "timezone": config.TIMEZONE,
-                "forecast_days": forecast_days,
-            },
-            timeout=timeout,
-        )
-        resp.raise_for_status()
-        hourly = resp.json().get("hourly") or {}
-        return {"ok": True, "hourly": hourly}
-    except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "error": str(exc)}
+    payload, error = _fetch_hourly_api(
+        "https://api.open-meteo.com/v1/forecast",
+        variables, lat, lon, forecast_days, timeout)
+    if payload is None:
+        return {"ok": False, "error": error}
+    hourly = payload.get("hourly") or {}
+    return {"ok": True, "hourly": hourly,
+            "utc_offset_seconds": payload.get("utc_offset_seconds")}
 
 
 # ---------------------------------------------------------------- 源 3
@@ -174,11 +235,21 @@ def _wind_level(speed_kmh):
 _SUIT_RANK = {"优": 4, "良": 3, "一般": 2, "较差": 1, "恶劣": 0}
 
 
-def _pick_current_index(times):
-    """在逐小时序列中定位『当前时刻』的下标（找不到则用 0）。"""
+def _pick_current_index(times, utc_offset_seconds=None):
+    """在逐小时序列中定位『当前时刻』的下标（找不到则用 0）。
+
+    API 返回的 time 是按 config.TIMEZONE 标注的本地时刻（如 Asia/Shanghai），
+    而服务器（Render 容器）进程时区是 UTC。直接比较 datetime.now() 会取到
+    偏移 8 小时前的槽位，因此这里必须换算到数据自身所用的时区。
+
+    utc_offset_seconds 取自 API 响应的 utc_offset_seconds 字段，缺失时回退到
+    config.TIMEZONE_UTC_OFFSET_SECONDS。
+    """
     if not times:
         return 0
-    now = datetime.now().strftime("%Y-%m-%dT%H")
+    if utc_offset_seconds is None:
+        utc_offset_seconds = config.TIMEZONE_UTC_OFFSET_SECONDS
+    now = datetime.now(timezone(timedelta(seconds=int(utc_offset_seconds)))).strftime("%Y-%m-%dT%H")
     for i, t in enumerate(times):
         if str(t).startswith(now):
             return i
@@ -419,8 +490,15 @@ def create_app():
             (station["name"],),
         )
 
-        # 告警与评分
-        alerts, score, level, label, metrics = evaluate_station(station, save=False)
+        # 告警与评分 — 优先使用 CRW 气候态基线
+        clim_anomaly = None
+        try:
+            clim_anomaly = crw_service.get_station_clim_anomaly(
+                station["lat"], station["lon"])
+        except Exception:
+            pass
+        alerts, score, level, label, metrics = evaluate_station(
+            station, save=False, clim_anomaly=clim_anomaly)
 
         # 海洋知识卡片
         knowledge = OCEAN_KNOWLEDGE.get(station["name"], "")
@@ -442,6 +520,8 @@ def create_app():
             "label": label,
             "alert_count": alert_count["v"] if alert_count else 0,
             "active_alerts": [a["alert_type"] for a in alerts],
+            "clim_anomaly": metrics.get("clim_anomaly"),
+            "baseline_type": metrics.get("baseline_type", "YoY"),
             "knowledge": knowledge,
         })
 
@@ -557,26 +637,20 @@ def create_app():
 
         lat, lon = station["lat"], station["lon"]
 
-        # --- 源 1：海洋要素（缓存 10 分钟）
-        mkey = f"marine:{station_id}"
-        marine = _cache_get(mkey, 600)
-        if marine is None:
-            marine = fetch_marine_live(lat, lon)
-            if marine.get("ok"):
-                _cache_set(mkey, marine)
-
-        # --- 源 2：气象要素（缓存 10 分钟）
-        wkey = f"weather:{station_id}"
-        weather = _cache_get(wkey, 600)
-        if weather is None:
-            weather = fetch_weather_live(lat, lon)
-            if weather.get("ok"):
-                _cache_set(wkey, weather)
+        # --- 源 1 / 源 2：海洋要素与气象要素
+        # 失败也进缓存（短 TTL 负缓存），避免每个请求都去撞限流；
+        # 上游持续失败时回退最近一次成功数据，并标记 stale，避免整页空白。
+        marine, marine_meta = _load_external("marine", station_id, lat, lon, fetch_marine_live)
+        weather, weather_meta = _load_external("weather", station_id, lat, lon, fetch_weather_live)
 
         hourly_m = marine.get("hourly") or {}
         hourly_w = weather.get("hourly") or {}
         times = hourly_m.get("time") or hourly_w.get("time") or []
-        idx = _pick_current_index(times)
+        # 优先采用数据自身返回的时区偏移，缺失时回退配置值
+        utc_offset = marine.get("utc_offset_seconds")
+        if utc_offset is None:
+            utc_offset = weather.get("utc_offset_seconds")
+        idx = _pick_current_index(times, utc_offset)
 
         def stat(key, src="marine"):
             src_hourly = hourly_m if src == "marine" else hourly_w
@@ -671,6 +745,64 @@ def create_app():
             _cache_set("fishery", data)
         return jsonify(data)
 
+    # ── NOAA CRW 热力图 / 气候态距平 ──
+    @app.route("/api/crw/heatmap", methods=["GET"])
+    def crw_heatmap():
+        """DHW 度周热力图网格数据。
+        前端用 Canvas 绘制空间热力覆盖层，替代固定标记。
+        """
+        dhw = crw_service.get_dhw_grid()
+        if dhw is None:
+            return jsonify({"error": "CRW data unavailable", "cached": False})
+        # 不反序列化全部 grid — 直接返序列化后走 Flask jsonify
+        return jsonify({
+            "bounds": dhw["bounds"],
+            "lats": dhw["lats"],
+            "lons": dhw["lons"],
+            "grid": dhw["grid"],
+            "stride": dhw["stride"],
+            "variable": dhw["variable"],
+            "data_time": dhw["time"],
+            "unit": "°C-weeks",
+        })
+
+    @app.route("/api/crw/anomaly", methods=["GET"])
+    def crw_anomaly():
+        """SST 距平网格（相对 1985–2012 气候态）。
+        负值=偏冷，正=偏暖。"""
+        ssta = crw_service.get_sstanomaly_grid()
+        if ssta is None:
+            return jsonify({"error": "CRW SST Anomaly unavailable", "cached": False})
+        return jsonify({
+            "bounds": ssta["bounds"],
+            "lats": ssta["lats"],
+            "lons": ssta["lons"],
+            "grid": ssta["grid"],
+            "stride": ssta["stride"],
+            "variable": ssta["variable"],
+            "data_time": ssta["time"],
+            "unit": "°C (vs 1985–2012)",
+        })
+
+    @app.route("/api/crw/clim", methods=["GET"])
+    def crw_clim():
+        """8 站点的 CRW 气候态 SST 距平摘要。
+        提供气候态基线数据给前端详情面板的「气候态距平」字段。
+        """
+        anoms = crw_service.get_all_station_anomalies()
+        import config as cfg
+        result = []
+        for s in cfg.MONITOR_STATIONS:
+            a = anoms.get(s["id"])
+            result.append({
+                "id": s["id"],
+                "name": s["name"],
+                "region": s["region"],
+                "anomaly": round(a, 2) if a is not None else None,
+                "label": _anomaly_label(a) if a is not None else None,
+            })
+        return jsonify({"stations": result, "data_time": _crw_data_time()})
+
     @app.route("/api/status", methods=["GET"])
     def status():
         return jsonify({
@@ -694,6 +826,34 @@ OCEAN_KNOWLEDGE = {
     "三亚海域": "三亚海域属热带南海，终年高温，SST 年均约 26–28℃，季节变幅小于 6℃。该区域拥有丰富的珊瑚礁生态系统，对热应力极为敏感——当 SST 连续超过 30℃ 超过 4 周，珊瑚白化概率大幅上升。",
     "西沙海域": "西沙群岛位于南海中部深水区，水深 1000–3000 米，是典型的大洋性岛礁海域。该区域 SST 年际波动与 ENSO（厄尔尼诺-南方涛动）密切相关，是监测热带海洋对全球气候响应的重要前哨。",
 }
+
+
+def _anomaly_label(anomaly):
+    """SST 距平 → 中文标签"""
+    if anomaly is None:
+        return None
+    a = abs(anomaly)
+    direction = "偏暖" if anomaly > 0 else "偏冷"
+    if a < 0.5:
+        return "正常"
+    if a < 1.0:
+        return f"略{direction}"
+    if a < 2.0:
+        return direction
+    return f"显著{direction}"
+
+
+def _crw_data_time():
+    """获取 CRW 缓存的第一个可用数据时间"""
+    dhw = crw_service.get_dhw_grid()
+    if dhw and dhw.get("time"):
+        return dhw["time"]
+    ssta = crw_service.get_sstanomaly_grid()
+    if ssta and ssta.get("time"):
+        return ssta["time"]
+    return None
+
+
 app = create_app()
 init_db()
 

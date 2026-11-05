@@ -182,8 +182,46 @@ body {
 }
 #map { width: 100%; height: 100%; }
 .leaflet-container { background: #051030 !important; }
-/* 暗色地图滤镜 */
-.leaflet-container { background: #051030 !important; }
+
+/* ── 热力图覆盖层 Canvas ── */
+.hm-canvas {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 10; opacity: 0.62;
+  transition: opacity 0.35s;
+}
+.hm-canvas.off { opacity: 0; pointer-events: none; }
+
+/* ── 图层切换按钮组 ── */
+.layer-toggle {
+  position: absolute; top: 10px; left: 10px; z-index: 20;
+  display: flex; gap: 4px;
+}
+.layer-btn {
+  padding: 5px 10px; font-size: 11px; font-weight: 600;
+  border: 1px solid rgba(255,255,255,0.12); border-radius: 6px;
+  background: rgba(8,24,58,0.85); color: var(--text-muted);
+  cursor: pointer; transition: all 0.2s; white-space: nowrap;
+}
+.layer-btn:hover { border-color: var(--blue-glow); color: var(--text-primary); }
+.layer-btn.active { background: rgba(59,158,255,0.15); border-color: var(--blue-glow);
+  color: var(--blue-light); box-shadow: 0 0 8px rgba(59,158,255,0.2); }
+
+/* ── 热力图图例 ── */
+.hm-legend {
+  position: absolute; bottom: 40px; left: 10px; z-index: 20;
+  background: rgba(8,24,58,0.88); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px; padding: 8px 10px; font-size: 10px;
+  color: var(--text-secondary); min-width: 52px;
+  transition: opacity 0.35s;
+}
+.hm-legend.hidden { opacity: 0; pointer-events: none; }
+.hm-legend .gradient-bar {
+  height: 8px; border-radius: 4px; margin: 4px 0;
+}
+.hm-legend .labels {
+  display: flex; justify-content: space-between; font-size: 9px;
+  color: var(--text-muted);
+}
 
 /* 自定义地图标记 */
 .marker-pin {
@@ -760,6 +798,17 @@ body {
 
       <!-- 地图 -->
       <div class="map-wrap">
+        <canvas class="hm-canvas" id="hmCanvas"></canvas>
+        <div class="layer-toggle" id="layerToggle">
+          <button class="layer-btn" data-layer="none" onclick="switchHeatmap('none')">📍 站点</button>
+          <button class="layer-btn" data-layer="dhw" onclick="switchHeatmap('dhw')">🔥 DHW</button>
+          <button class="layer-btn" data-layer="ssta" onclick="switchHeatmap('ssta')">🌡️ 距平</button>
+        </div>
+        <div class="hm-legend hidden" id="hmLegend">
+          <span id="hmTitle">DHW (°C-weeks)</span>
+          <div class="gradient-bar" id="hmGradient"></div>
+          <div class="labels" id="hmLabels"></div>
+        </div>
         <div id="map"></div>
       </div>
     </div>
@@ -1096,6 +1145,169 @@ function initMap() {
   const mapStyle = document.createElement('style');
   mapStyle.textContent = '.leaflet-tile { filter: brightness(0.55) saturate(0.3) hue-rotate(170deg) !important; }';
   document.head.appendChild(mapStyle);
+
+  // 绑定热力图——监听地图移动/缩放以重绘 Canvas
+  map.on('moveend zoomend resize', renderHeatmapCanvas);
+}
+
+// ============================================================
+// Canvas 热力图覆盖层（NOAA CRW DHW / SST 距平）
+// ============================================================
+var hmCurrentLayer = 'none';
+var hmDHW = null;   // 缓存 DHW 网格
+var hmSSTA = null;  // 缓存 SSTA 网格
+var hmFetching = {}; // 防重复请求
+
+// ── DHW 色阶
+var dhwColors = [
+  { v: 0,  c: [33,102,172] },   // 无热应力
+  { v: 1,  c: [146,197,222] },  // 轻度
+  { v: 2,  c: [244,165,130] },  // 中度
+  { v: 4,  c: [214,96,77] },    // 预警
+  { v: 8,  c: [178,24,43] },    // 严重
+  { v: 12, c: [103,0,31] },     // 极严重
+];
+
+// ── SST 距平色阶 (RdYlBu 反转，暖=红 冷=蓝)
+var sstaColors = [
+  { v: -5, c: [5,48,97] },      // 严重偏冷
+  { v: -2, c: [33,102,172] },
+  { v: -1, c: [67,147,195] },
+  { v:  0, c: [209,229,240] },  // 中性
+  { v:  1, c: [253,219,199] },
+  { v:  2, c: [244,165,130] },
+  { v:  3, c: [214,96,77] },
+  { v:  5, c: [178,24,43] },    // 严重偏暖
+];
+
+function colorForValue(val, colors) {
+  if (val == null) return null;  // NaN → 透明
+  var lo = colors[0], hi = colors[colors.length - 1];
+  for (var i = 0; i < colors.length; i++) {
+    if (val < colors[i].v) { lo = colors[i - 1] || colors[0]; hi = colors[i]; break; }
+  }
+  var range = hi.v - lo.v;
+  var t = range > 0 ? Math.min(1, Math.max(0, (val - lo.v) / range)) : 0;
+  return [
+    Math.round(lo.c[0] + (hi.c[0] - lo.c[0]) * t),
+    Math.round(lo.c[1] + (hi.c[1] - lo.c[1]) * t),
+    Math.round(lo.c[2] + (hi.c[2] - lo.c[2]) * t)
+  ];
+}
+
+async function preloadHeatmapData() {
+  /* 后台拉取 DHW + SSTA，不阻塞页面交互 */
+  try {
+    var r = await fetch('/api/crw/heatmap');
+    hmDHW = await r.json();
+  } catch(_) {}
+  try {
+    var r = await fetch('/api/crw/anomaly');
+    hmSSTA = await r.json();
+  } catch(_) {}
+}
+
+function currentHeatmapData() {
+  if (hmCurrentLayer === 'dhw') return hmDHW;
+  if (hmCurrentLayer === 'ssta') return hmSSTA;
+  return null;
+}
+
+function switchHeatmap(layer) {
+  hmCurrentLayer = layer;
+  // 更新按钮状态
+  var btns = document.querySelectorAll('#layerToggle .layer-btn');
+  btns.forEach(function(b) {
+    b.classList.toggle('active', b.getAttribute('data-layer') === layer);
+  });
+  // 显示/隐藏图例
+  var legend = document.getElementById('hmLegend');
+  legend.classList.toggle('hidden', layer === 'none');
+
+  if (layer === 'none') {
+    document.getElementById('hmCanvas').classList.add('off');
+    return;
+  }
+  document.getElementById('hmCanvas').classList.remove('off');
+
+  // 更新图例
+  var colors, unit, title;
+  if (layer === 'dhw') { colors = dhwColors; unit = '°C-weeks'; title = 'DHW 度周'; }
+  else { colors = sstaColors; unit = '°C'; title = 'SST 距平 (vs 1985–2012)'; }
+  document.getElementById('hmTitle').textContent = title;
+  updateLegend(colors, unit);
+
+  // 数据未加载则异步拉取
+  var data = currentHeatmapData();
+  if (!data && !hmFetching[layer]) {
+    hmFetching[layer] = true;
+    var url = layer === 'dhw' ? '/api/crw/heatmap' : '/api/crw/anomaly';
+    fetch(url).then(function(r) { return r.json(); }).then(function(d) {
+      if (layer === 'dhw') hmDHW = d; else hmSSTA = d;
+      renderHeatmapCanvas();
+    }).catch(function(){}).finally(function() { hmFetching[layer] = false; });
+  } else if (data) {
+    renderHeatmapCanvas();
+  }
+}
+
+function updateLegend(colors, unit) {
+  var grad = document.getElementById('hmGradient');
+  var labels = document.getElementById('hmLabels');
+  var stops = colors.map(function(c) {
+    return 'rgb(' + c.c.join(',') + ')';
+  }).join(',');
+  grad.style.background = 'linear-gradient(to right, ' + stops + ')';
+  var lo = colors[0].v, hi = colors[colors.length - 1].v;
+  labels.textContent = (lo < 0 ? lo : '0') + ' ' + unit + '  →  ' + hi + ' ' + unit;
+}
+
+function renderHeatmapCanvas() {
+  if (hmCurrentLayer === 'none') return;
+  var data = currentHeatmapData();
+  if (!data || !data.lats || !data.lons || !data.grid) return;
+
+  var canvas = document.getElementById('hmCanvas');
+  var mapWrap = canvas.parentElement;
+  var w = mapWrap.clientWidth, h = mapWrap.clientHeight;
+
+  // 只在尺寸变化时重置 Canvas（避免模糊）
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  var cw = Math.round(w * dpr);
+  var ch = Math.round(h * dpr);
+  if (canvas.width !== cw || canvas.height !== ch) {
+    canvas.width = cw; canvas.height = ch;
+    canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  }
+
+  var ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  var lats = data.lats, lons = data.lons, grid = data.grid;
+  var nlat = lats.length, nlon = lons.length;
+  if (nlat === 0 || nlon === 0) return;
+
+  var colors = hmCurrentLayer === 'dhw' ? dhwColors : sstaColors;
+
+  // 批量绘制：遍历每个网格单元，映射到屏幕像素
+  for (var i = 0; i < nlat - 1; i++) {
+    for (var j = 0; j < nlon - 1; j++) {
+      var v = grid[i][j];
+      if (v == null) continue;  // 跳过海洋外（NaN → null）
+      var rgb = colorForValue(v, colors);
+      if (!rgb) continue;
+
+      // 四个角的屏幕坐标
+      var p1 = map.latLngToContainerPoint([lats[i],   lons[j]]);
+      var p2 = map.latLngToContainerPoint([lats[i+1], lons[j+1]]);
+
+      // 视野外跳过
+      if (p2.x < -10 || p1.x > w + 10 || p2.y < -10 || p1.y > h + 10) continue;
+
+      ctx.fillStyle = 'rgba(' + rgb.join(',') + ',0.78)';
+      ctx.fillRect(p1.x, p1.y, Math.max(2, p2.x - p1.x), Math.max(2, p2.y - p1.y));
+    }
+  }
 }
 
 function updateMapMarkers(data) {
@@ -1339,6 +1551,7 @@ function renderDetail(d) {
       '<div class="detail-stat"><div class="ds-label">🔺 7日最高</div><div class="ds-value" style="color:var(--orange)">' + (d.max_7d != null ? d.max_7d + '℃' : '—') + '</div></div>' +
       '<div class="detail-stat"><div class="ds-label">🔻 7日最低</div><div class="ds-value" style="color:var(--blue-light)">' + (d.min_7d != null ? d.min_7d + '℃' : '—') + '</div></div>' +
       '<div class="detail-stat"><div class="ds-label">🔄 去年同期</div><div class="ds-value" style="color:var(--text-muted)">' + (d.yoy != null ? d.yoy + '℃' : '—') + '</div></div>' +
+      '<div class="detail-stat"><div class="ds-label">🌍 30年气候态距平</div><div class="ds-value" style="color:' + ((d.clim_anomaly != null) ? (d.clim_anomaly > 0 ? 'var(--orange)' : 'var(--blue-light)') : 'var(--text-muted)') + '">' + (d.clim_anomaly != null ? (d.clim_anomaly >= 0 ? '+' : '') + d.clim_anomaly + '℃' : d.baseline_type ? '回退 YoY' : '—') + '</div></div>' +
     '</div>' +
     '<div class="detail-alerts-row"><div class="dk-title">⚠️ 活跃预警</div>' + alertTags + '</div>' +
     (d.knowledge ? '<div class="detail-knowledge"><div class="dk-title">📚 海洋监测知识</div><div class="dk-text">' + d.knowledge + '</div></div>' : '') +
@@ -1792,6 +2005,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadOverview();
   loadReport();
   preloadDetailCache();
+  preloadHeatmapData();
   setInterval(loadOverview, 300000);
 });
 
