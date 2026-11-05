@@ -1878,8 +1878,9 @@ let srcChart = null;
 let fisheryChart = null;
 let fisheryData = null;       // 完整渔业数据（缓存）
 let fisheryYear = 'latest';   // 当前选中年份
-let _sourcesCache = {};       // 站点源数据客户端缓存
+let _sourcesCache = {};       // 站点源数据客户端缓存: {sid: {data, ts}}
 let _sourcesPreloading = {};  // 防重复请求
+const SOURCES_CACHE_TTL = 120000;  // 客户端缓存 120 秒，超时重新请求
 
 async function loadSources(forceStationId) {
   const sel = document.getElementById('srcStation');
@@ -1899,19 +1900,22 @@ async function loadSources(forceStationId) {
   }
   const sid = forceStationId || (sel && sel.value ? sel.value : '1');
 
-  // 先检查客户端缓存
-  var cached = _sourcesCache['s' + sid];
+  // 先检查客户端缓存（120 秒 TTL）
+  var entry = _sourcesCache['s' + sid];
+  var cached = entry && entry.data;
+  var expired = entry && (Date.now() - entry.ts > SOURCES_CACHE_TTL);
   // 预拉取缓存只有 Marine（Weather 占位），用户实际查看时透明补全
   var needsWeather = cached && cached.weather && cached.weather.error && cached.weather.error.indexOf('预拉取') >= 0;
-  if (cached && !needsWeather) {
+  if (cached && !needsWeather && !expired) {
     renderSources(cached);
-  } else if (cached) {
+  } else if (cached || expired) {
     try {
       var fresh = await (await fetch('/api/sources/' + sid)).json();
-      _sourcesCache['s' + sid] = fresh;
+      _sourcesCache['s' + sid] = {data: fresh, ts: Date.now()};
       renderSources(fresh);
     } catch(e) {
-      renderSources(cached);
+      if (cached) renderSources(cached);
+      else document.getElementById('suitAdvice').textContent = '数据加载失败，请稍后重试。';
     }
   } else {
     // 显示加载态
@@ -1922,7 +1926,7 @@ async function loadSources(forceStationId) {
     }
     try {
       var d = await (await fetch('/api/sources/' + sid)).json();
-      _sourcesCache['s' + sid] = d;
+      _sourcesCache['s' + sid] = {data: d, ts: Date.now()};
       renderSources(d);
     } catch(e) {
       console.error('多源数据加载失败', e);
@@ -1946,7 +1950,7 @@ async function preloadSourcesCache() {
     try {
       var resp = await fetch('/api/sources/' + i + '?preload=1');
       var d = await resp.json();
-      if (!d.error) _sourcesCache['s' + i] = d;
+      if (!d.error) _sourcesCache['s' + i] = {data: d, ts: Date.now()};
     } catch(_) {}
     await new Promise(function(r) { setTimeout(r, 1500); });  // 1.5s gap between preloads
   }
