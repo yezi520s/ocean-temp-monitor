@@ -682,6 +682,24 @@ body {
 .src-row .sr-v { color: var(--text-primary); font-weight: 600; text-align: right; }
 .src-row .sr-v small { color: var(--text-muted); font-weight: 400; font-size: 10px; margin-left: 3px; }
 
+/* 渔业年份选择条 */
+.fishery-year-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 0; margin-bottom: 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-size: 12px; color: var(--text-muted);
+}
+.fishery-year-bar .fc-select {
+  font-size: 11px; padding: 4px 8px;
+  background: rgba(8,24,58,0.7); color: var(--text-primary);
+  border: 1px solid rgba(64,158,255,0.2); border-radius: 6px;
+  outline: none; cursor: pointer;
+}
+.fishery-year-bar .fc-select:focus { border-color: var(--blue-light); }
+
+/* 选中高亮 */
+.fishery-year-bar select option:checked { background: var(--blue-light); color: #fff; }
+
 @media (max-width: 1100px) {
   .src-grid { grid-template-columns: 1fr; }
 }
@@ -1840,11 +1858,15 @@ function renderForecastTable() {
 // 多源数据（海洋 / 气象 / 渔业）
 // ------------------------------------------------------------
 let srcChart = null;
-let fisheryLoaded = false;
+let fisheryChart = null;
+let fisheryData = null;       // 完整渔业数据（缓存）
+let fisheryYear = 'latest';   // 当前选中年份
+let _sourcesCache = {};       // 站点源数据客户端缓存
+let _sourcesPreloading = {};  // 防重复请求
 
-async function loadSources() {
+async function loadSources(forceStationId) {
   const sel = document.getElementById('srcStation');
-  // 首次进入：填充海域下拉
+  // 首次进入：填充海域下拉（不阻塞）
   if (sel && sel.options.length === 0) {
     if (stationsData && stationsData.length) {
       sel.innerHTML = stationsData.map(s =>
@@ -1858,18 +1880,47 @@ async function loadSources() {
       } catch(e) {}
     }
   }
-  const sid = sel && sel.value ? sel.value : '1';
+  const sid = forceStationId || (sel && sel.value ? sel.value : '1');
 
-  try {
-    const d = await (await fetch('/api/sources/' + sid)).json();
-    renderSources(d);
-  } catch(e) {
-    console.error('多源数据加载失败', e);
+  // 先检查客户端缓存
+  var cached = _sourcesCache['s' + sid];
+  if (cached) {
+    renderSources(cached);
+  } else {
+    // 显示加载态
+    var banner = document.getElementById('suitBanner');
+    if (banner) {
+      document.getElementById('suitOverall').textContent = '⟳';
+      document.getElementById('suitAdvice').textContent = '正在获取海况与气象数据…';
+    }
+    try {
+      var d = await (await fetch('/api/sources/' + sid)).json();
+      _sourcesCache['s' + sid] = d;
+      renderSources(d);
+    } catch(e) {
+      console.error('多源数据加载失败', e);
+      document.getElementById('suitAdvice').textContent = '数据加载失败，请稍后重试。';
+    }
   }
 
-  if (!fisheryLoaded) {
-    fisheryLoaded = true;
+  // 渔业数据仅首次加载（全年份通用）
+  if (!fisheryData) {
     loadFishery();
+  }
+}
+
+/* 后台预拉取全部 8 站源数据（DOM 就绪后调用，串行 500ms 间隔） */
+async function preloadSourcesCache() {
+  for (var i = 1; i <= 8; i++) {
+    if (_sourcesCache['s' + i]) continue;
+    if (_sourcesPreloading['s' + i]) continue;
+    _sourcesPreloading['s' + i] = true;
+    try {
+      var resp = await fetch('/api/sources/' + i);
+      var d = await resp.json();
+      if (!d.error) _sourcesCache['s' + i] = d;
+    } catch(_) {}
+    await new Promise(function(r) { setTimeout(r, 500); });
   }
 }
 
@@ -1972,27 +2023,185 @@ function row(k, v) {
 }
 
 async function loadFishery() {
-  const box = document.getElementById('fisheryRows');
-  const badge = document.getElementById('badgeFishery');
+  var badge = document.getElementById('badgeFishery');
+  var box = document.getElementById('fisheryRows');
   try {
-    const d = await (await fetch('/api/fishery')).json();
-    _badge(badge, d.ok);
-    const series = d.series || [];
-    if (!series.length) {
-      box.innerHTML = row('状态', '暂无数据');
-      return;
-    }
-    // 单位换算：吨 → 万吨
-    box.innerHTML = series.map(s => {
-      const latest = s.latest;
-      if (!latest) return row(s.label, '—');
-      const wan = (latest.value / 10000).toFixed(1);
-      return row(s.label + '（' + latest.year + '）', wan + '<small>万吨</small>');
-    }).join('') + '<div class="src-row"><span class="sr-k">统计区间</span><span class="sr-v">2000 – 2024</span></div>';
+    var d = await (await fetch('/api/fishery')).json();
+    if (!d.ok) { _badge(badge, false); box.innerHTML = row('状态', '数据源异常'); return; }
+    _badge(badge, true);
+    fisheryData = d;
+
+    // 构建年份列表（取所有序列的并集，去重排序）
+    var yearSet = {};
+    (d.series || []).forEach(function(s) {
+      (s.points || []).forEach(function(p) { yearSet[p.year] = true; });
+    });
+    var years = Object.keys(yearSet).sort();
+
+    // 默认展示最新年份
+    fisheryYear = years.length ? years[years.length - 1] : 'latest';
+
+    renderFisheryCard();
   } catch(e) {
     _badge(badge, false);
     if (box) box.innerHTML = row('状态', '加载失败');
   }
+}
+
+/* ---- 渲染渔业产量卡片（含年份选择器 + 柱状图） ---- */
+function renderFisheryCard() {
+  var box = document.getElementById('fisheryRows');
+  if (!fisheryData) { box.innerHTML = row('状态', '暂无数据'); return; }
+
+  var series = fisheryData.series || [];
+  if (!series.length) { box.innerHTML = row('状态', '暂无数据'); return; }
+
+  // 收集年份列表
+  var yearSet = {};
+  series.forEach(function(s) {
+    (s.points || []).forEach(function(p) { yearSet[p.year] = true; });
+  });
+  var years = Object.keys(yearSet).sort();
+  var selYear = fisheryYear;
+
+  // 获取最新可用年
+  var latestYear = years.length ? years[years.length - 1] : '2024';
+
+  // 构建年份下拉选项
+  var yearOptions = years.map(function(y) {
+    return '<option value="' + y + '"' + (y === selYear ? ' selected' : '') + '>' + y + '</option>';
+  }).join('');
+
+  // 当前年份各指标值（万吨）
+  var rowsHtml = series.map(function(s) {
+    var pt = null;
+    // 找指定年份数据点
+    (s.points || []).forEach(function(p) { if (p.year === selYear) pt = p; });
+    if (!pt) return row(s.label, '—');
+    var val = (pt.value / 10000).toFixed(1);
+    return row(s.label + '<small>（' + selYear + '）</small>', val + '<small> 万吨</small>');
+  }).join('');
+
+  // 同比（相对去年）
+  var prevYear = String(Number(selYear) - 1);
+  var yoyRows = series.map(function(s) {
+    var cur = null, prev = null;
+    (s.points || []).forEach(function(p) {
+      if (p.year === selYear) cur = p.value;
+      if (p.year === prevYear) prev = p.value;
+    });
+    if (cur === null || prev === null) return '';
+    var pct = ((cur - prev) / prev * 100).toFixed(1);
+    var color = pct >= 0 ? 'var(--green)' : 'var(--red)';
+    var arrow = pct >= 0 ? '▲' : '▼';
+    return '<div class="src-row"><span class="sr-k">' + s.label + ' 同比</span><span class="sr-v" style="color:' + color + '">' + arrow + ' ' + Math.abs(pct) + '<small>%</small></span></div>';
+  }).filter(Boolean).join('');
+
+  // 统计区间
+  var spanRow = '<div class="src-row"><span class="sr-k">统计区间</span><span class="sr-v">' + years[0] + ' – ' + years[years.length - 1] + '</span></div>';
+
+  box.innerHTML =
+    '<div class="fishery-year-bar">' +
+      '<label>📅 年份：</label>' +
+      '<select class="fc-select" style="width:auto;min-width:120px;" onchange="fisheryYear=this.value;renderFisheryCard()">' +
+        yearOptions +
+      '</select>' +
+      '<span style="margin-left:auto;font-size:10px;color:var(--text-muted)">数据: World Bank</span>' +
+    '</div>' +
+    rowsHtml +
+    yoyRows +
+    spanRow +
+    '<div id="fisheryChartBox" style="margin-top:14px;"><div class="chart-inner" id="fisheryChart" style="height:220px;"></div></div>';
+
+  // 画柱状图
+  renderFisheryChart(series, years, selYear);
+}
+
+/* ---- 渔业产量 ECharts 柱状图（支持高亮选中年） ---- */
+function renderFisheryChart(seriesData, years, selYear) {
+  var el = document.getElementById('fisheryChart');
+  if (!el) return;
+  // 年份切换时 innerHTML 重建了 DOM，先释放旧实例
+  if (fisheryChart) { fisheryChart.dispose(); fisheryChart = null; }
+  fisheryChart = echarts.init(el);
+
+  // 三个指标的颜色
+  var colors = ['#3b9eff', '#ffa940', '#52c41a'];
+  var names = seriesData.map(function(s) { return s.label; });
+
+  // 构建 series：每个指标一根柱
+  var chartSeries = seriesData.map(function(s, idx) {
+    var dataArr = years.map(function(y) {
+      var val = null;
+      (s.points || []).forEach(function(p) { if (p.year === y) val = p.value; });
+      return val !== null ? Number((val / 10000).toFixed(1)) : null;
+    });
+    return {
+      name: s.label,
+      type: 'bar',
+      barWidth: years.length > 15 ? 6 : 14,
+      barGap: '30%',
+      data: dataArr,
+      itemStyle: {
+        color: colors[idx % colors.length],
+        borderRadius: [3, 3, 0, 0],
+      },
+      emphasis: {
+        itemStyle: { color: colors[idx % colors.length], borderWidth: 2, borderColor: '#fff' },
+      },
+      // 选中年的柱加亮描边
+    };
+  });
+
+  // 选中年份高亮标记区域
+  var selIdx = years.indexOf(selYear);
+  var markAreas = [];
+  if (selIdx >= 0) {
+    markAreas.push([
+      { xAxis: selIdx - 0.4 }, { xAxis: selIdx + 0.4 },
+    ]);
+  }
+
+  fisheryChart.setOption({
+    ...chartDark,
+    legend: {
+      data: names, bottom: 0, textStyle: { color: '#89a4c7', fontSize: 11 },
+      itemWidth: 14, itemHeight: 10,
+    },
+    grid: { top: 8, right: 18, bottom: 36, left: 50 },
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(8,24,58,0.95)',
+      borderColor: 'rgba(64,158,255,0.3)',
+      textStyle: { color: '#e8f0fe', fontSize: 12 },
+      axisPointer: { type: 'shadow' },
+      formatter: function(params) {
+        var lines = ['<b>' + params[0].axisValue + '</b>'];
+        params.forEach(function(p) {
+          if (p.value !== undefined && p.value !== null) {
+            lines.push(p.marker + ' ' + p.seriesName + ': ' + p.value + ' 万吨');
+          }
+        });
+        return lines.join('<br>');
+      },
+    },
+    xAxis: {
+      type: 'category',
+      data: years,
+      axisLabel: { color: '#6b8cae', fontSize: 10, rotate: years.length > 20 ? 45 : 0 },
+      axisLine: { lineStyle: { color: 'rgba(255,255,255,0.08)' } },
+    },
+    yAxis: {
+      type: 'value',
+      name: '万吨',
+      nameTextStyle: { color: '#6b8cae', fontSize: 10 },
+      axisLabel: { color: '#6b8cae', fontSize: 10 },
+      splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
+    },
+    series: chartSeries,
+  });
+
+  fisheryChart.resize();
 }
 
 
@@ -2006,6 +2215,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadReport();
   preloadDetailCache();
   preloadHeatmapData();
+  preloadSourcesCache();
   setInterval(loadOverview, 300000);
 });
 
@@ -2025,7 +2235,7 @@ async function preloadDetailCache() {
 
 window.addEventListener('resize', () => {
   trendChart?.resize(); compareChart?.resize(); map?.invalidateSize();
-  fcChart?.resize(); srcChart?.resize();
+  fcChart?.resize(); srcChart?.resize(); fisheryChart?.resize();
 });
 </script>
 
