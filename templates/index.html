@@ -1901,8 +1901,18 @@ async function loadSources(forceStationId) {
 
   // 先检查客户端缓存
   var cached = _sourcesCache['s' + sid];
-  if (cached) {
+  // 预拉取缓存只有 Marine（Weather 占位），用户实际查看时透明补全
+  var needsWeather = cached && cached.weather && cached.weather.error && cached.weather.error.indexOf('预拉取') >= 0;
+  if (cached && !needsWeather) {
     renderSources(cached);
+  } else if (cached) {
+    try {
+      var fresh = await (await fetch('/api/sources/' + sid)).json();
+      _sourcesCache['s' + sid] = fresh;
+      renderSources(fresh);
+    } catch(e) {
+      renderSources(cached);
+    }
   } else {
     // 显示加载态
     var banner = document.getElementById('suitBanner');
@@ -1926,18 +1936,19 @@ async function loadSources(forceStationId) {
   }
 }
 
-/* 后台预拉取全部 8 站源数据（DOM 就绪后调用，串行 500ms 间隔） */
+/* 后台预拉取源数据，仅缓存海洋要素（气象要素被 Render 共享 IP 限流，按需加载） */
+var _weatherCoolingOff = false;  // 全局天气限流标记
 async function preloadSourcesCache() {
   for (var i = 1; i <= 8; i++) {
     if (_sourcesCache['s' + i]) continue;
     if (_sourcesPreloading['s' + i]) continue;
     _sourcesPreloading['s' + i] = true;
     try {
-      var resp = await fetch('/api/sources/' + i);
+      var resp = await fetch('/api/sources/' + i + '?preload=1');
       var d = await resp.json();
       if (!d.error) _sourcesCache['s' + i] = d;
     } catch(_) {}
-    await new Promise(function(r) { setTimeout(r, 500); });
+    await new Promise(function(r) { setTimeout(r, 1500); });  // 1.5s gap between preloads
   }
 }
 

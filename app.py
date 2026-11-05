@@ -664,11 +664,20 @@ def create_app():
 
         lat, lon = station["lat"], station["lon"]
 
+        # ?preload=1：后台预拉取模式，只请求 Marine API（Weather 在 Render 上被主站限流）
+        preload_only = request.args.get("preload", "") == "1"
+
         # --- 源 1 / 源 2：海洋要素与气象要素
         # 失败也进缓存（短 TTL 负缓存），避免每个请求都去撞限流；
         # 上游持续失败时回退最近一次成功数据，并标记 stale，避免整页空白。
+        # 预拉取模式跳过 Weather（Render 共享 IP 被 Open-Meteo 主站限流）；
+        # 用户实际查看某站时才按需拉取气象数据。
         marine, marine_meta = _load_external("marine", station_id, lat, lon, fetch_marine_live)
-        weather, weather_meta = _load_external("weather", station_id, lat, lon, fetch_weather_live)
+        if preload_only:
+            weather = {"ok": False, "error": "后台预拉取，气象数据按需加载"}
+            weather_meta = {"stale": False}
+        else:
+            weather, weather_meta = _load_external("weather", station_id, lat, lon, fetch_weather_live)
 
         hourly_m = marine.get("hourly") or {}
         hourly_w = weather.get("hourly") or {}
