@@ -679,6 +679,7 @@ body {
 }
 .src-badge.ok { background: rgba(0,227,150,0.12); color: var(--green); }
 .src-badge.fail { background: rgba(255,71,87,0.15); color: var(--red); }
+.src-err { font-size: 11px; color: var(--text-muted); padding: 8px 0; text-align: center; }
 .src-provider { font-size: 10px; color: var(--text-muted); margin-bottom: 10px; letter-spacing: 0.3px; }
 .src-rows { display: flex; flex-direction: column; }
 .src-row {
@@ -1946,9 +1947,9 @@ function _fmt(v, unit, digits) {
   return n + '<small>' + (unit || '') + '</small>';
 }
 
-function _badge(el, ok) {
+function _badge(el, ok, label) {
   if (!el) return;
-  el.textContent = ok ? '已连接' : '连接失败';
+  el.textContent = ok ? '已连接' : (label || '连接失败');
   el.className = 'src-badge ' + (ok ? 'ok' : 'fail');
 }
 
@@ -1969,7 +1970,10 @@ function renderSources(d) {
   const m = d.marine || {};
   const w = d.weather || {};
   _badge(document.getElementById('badgeMarine'), m.ok);
-  _badge(document.getElementById('badgeWeather'), w.ok);
+  var wBadge = document.getElementById('badgeWeather');
+  if (w.ok) { _badge(wBadge, true); }
+  else if (w.stale) { _badge(wBadge, false, '陈旧数据'); }
+  else { _badge(wBadge, false, '限流中'); }
 
   // 海洋要素
   set('marineRows',
@@ -1981,15 +1985,19 @@ function renderSources(d) {
     row('24h 最大浪高', _fmt(m.wave_height && m.wave_height.max, 'm', 2))
   );
 
-  // 气象要素
-  set('weatherRows',
-    row('气温', _fmt(w.air_temp && w.air_temp.now, '℃', 1)) +
-    row('风速', _fmt(w.wind_speed && w.wind_speed.now, 'km/h', 1)) +
-    row('24h 最大风速', _fmt(w.wind_speed && w.wind_speed.max, 'km/h', 1)) +
-    row('气压', _fmt(w.pressure && w.pressure.now, 'hPa', 1)) +
-    row('降水', _fmt(w.precipitation && w.precipitation.now, 'mm', 1)) +
-    row('相对湿度', _fmt(w.humidity && w.humidity.now, '%', 0))
-  );
+  // 气象要素 — 失败时用旧数据（stale），否则显示限流提示
+  if (w.ok || w.stale) {
+    set('weatherRows',
+      row('气温', _fmt(w.air_temp && w.air_temp.now, '℃', 1)) +
+      row('风速', _fmt(w.wind_speed && w.wind_speed.now, 'km/h', 1)) +
+      row('24h 最大风速', _fmt(w.wind_speed && w.wind_speed.max, 'km/h', 1)) +
+      row('气压', _fmt(w.pressure && w.pressure.now, 'hPa', 1)) +
+      row('降水', _fmt(w.precipitation && w.precipitation.now, 'mm', 1)) +
+      row('相对湿度', _fmt(w.humidity && w.humidity.now, '%', 0))
+    );
+  } else {
+    set('weatherRows', '<div class="src-err">' + (w.error || '限流') + ' — 请稍后刷新</div>');
+  }
 
   // 24h 时序图
   const tl = d.timeline || {};

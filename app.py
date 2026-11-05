@@ -25,6 +25,8 @@ import crw_service
 # ======================================================================
 _CACHE = {}
 _CACHE_LOCK = threading.Lock()
+_WEATHER_429_UNTIL = 0.0  # global weather 429 cooldown (monotonic timestamp)
+_WEATHER_429_LOCK = threading.Lock()
 
 
 def _cache_get(key, ttl):
@@ -93,10 +95,10 @@ def _now_iso():
 def _fetch_hourly_api(url, variables, lat, lon, forecast_days, timeout):
     """请求 Open-Meteo 类接口，返回 (payload, error)。
 
-    仅对限流/网关类状态码退避重试；4xx 参数错误不重试（重试也没用，
-    且会加剧限流）。总耗时受 EXTERNAL_TIMEOUT × EXTERNAL_RETRY_ATTEMPTS
-    + 退避约束，须远小于 gunicorn --timeout 120。
+    429 专用指数退避 + jitter，尊重 Retry-After 头；
+    5xx 仍用短退避重试。总耗时远小于 gunicorn --timeout 120。
     """
+    import random as _random
     params = {
         "latitude": lat, "longitude": lon,
         "hourly": ",".join(variables),
@@ -108,10 +110,23 @@ def _fetch_hourly_api(url, variables, lat, lon, forecast_days, timeout):
         try:
             resp = requests.get(url, params=params, timeout=timeout)
             if resp.status_code in config.EXTERNAL_RETRY_STATUS:
-                last_error = f"{resp.status_code} 上游限流/不可用"
+                last_error = f"{resp.status_code}"
                 if attempt < config.EXTERNAL_RETRY_ATTEMPTS - 1:
-                    time.sleep(min(config.EXTERNAL_BACKOFF_MAX,
-                                   0.5 * (2 ** attempt)))
+                    if resp.status_code == 429:
+                        # 429：指数退避 2^attempt s + jitter ±30%，尊重 Retry-After
+                        retry = resp.headers.get("Retry-After")
+                        if retry is not None:
+                            try:
+                                delay = float(retry)
+                            except (ValueError, TypeError):
+                                delay = 2.0 ** attempt
+                        else:
+                            delay = 2.0 ** attempt
+                        delay += _random.uniform(-0.3 * delay, 0.3 * delay)
+                        delay = max(1.0, min(delay, 12.0))
+                    else:
+                        delay = min(config.EXTERNAL_BACKOFF_MAX, 0.5 * (2 ** attempt))
+                    time.sleep(delay)
                 continue
             resp.raise_for_status()
             return resp.json(), None
@@ -144,6 +159,11 @@ def fetch_marine_live(lat, lon, forecast_days=2, timeout=None):
 # ---------------------------------------------------------------- 源 2
 def fetch_weather_live(lat, lon, forecast_days=2, timeout=None):
     """Open-Meteo Weather API —— 风 / 气温 / 气压 / 降水 / 云量 / 湿度。"""
+    # 全局 429 静默保护：一次限流后 120s 内不重试，避免 8 站串行全部撞限
+    global _WEATHER_429_UNTIL
+    with _WEATHER_429_LOCK:
+        if time.monotonic() < _WEATHER_429_UNTIL:
+            return {"ok": False, "error": "429 上游限流（全局冷却中）"}
     timeout = config.EXTERNAL_TIMEOUT if timeout is None else timeout
     variables = [
         "temperature_2m", "wind_speed_10m", "wind_direction_10m",
@@ -153,6 +173,9 @@ def fetch_weather_live(lat, lon, forecast_days=2, timeout=None):
         "https://api.open-meteo.com/v1/forecast",
         variables, lat, lon, forecast_days, timeout)
     if payload is None:
+        if error and "429" in str(error):
+            with _WEATHER_429_LOCK:
+                _WEATHER_429_UNTIL = time.monotonic() + 120.0
         return {"ok": False, "error": error}
     hourly = payload.get("hourly") or {}
     return {"ok": True, "hourly": hourly,
@@ -716,6 +739,7 @@ def create_app():
                 "pressure": pressure, "precipitation": precip,
                 "cloud_cover": cloud, "humidity": humidity,
                 "error": weather.get("error"),
+                "stale": weather_meta.get("stale", False),
             },
             "suitability": {
                 "sea_state": sea_state,
