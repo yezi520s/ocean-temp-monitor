@@ -24,6 +24,7 @@ EXTERNAL_BACKOFF_MAX = 1         # 退避上限（秒）
 EXTERNAL_RETRY_STATUS = (429, 500, 502, 503, 504)  # 可重试的上游状态码
 EXTERNAL_TTL_OK = 600            # 成功结果缓存（秒）
 EXTERNAL_TTL_FAIL = 60           # 失败结果负缓存（秒）：避免每请求都撞限流
+EXTERNAL_STALE_TTL = 3600        # 陈旧成功数据保留（秒）：上游故障时回退最近一次成功结果
 
 # 数据同步参数
 FORECAST_DAYS = 7            # 一键同步拉取未来 7 天逐时预报
