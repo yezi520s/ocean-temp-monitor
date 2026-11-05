@@ -247,33 +247,42 @@ def _fetch_7timer_weather(lat, lon, timeout):
 
 
 def fetch_weather_live(lat, lon, forecast_days=2, timeout=None):
-    """气象要素 —— 优先 Open-Meteo，被限 429 时回退 7Timer! GFS。"""
+    """气象要素 —— 优先 Open-Meteo，被限 429 或冷却期直接走 7Timer! GFS。"""
     global _WEATHER_429_UNTIL
-    with _WEATHER_429_LOCK:
-        if time.monotonic() < _WEATHER_429_UNTIL:
-            return {"ok": False, "error": "429 上游限流（全局冷却中）"}
     timeout = config.EXTERNAL_TIMEOUT if timeout is None else timeout
     variables = [
         "temperature_2m", "wind_speed_10m", "wind_direction_10m",
         "surface_pressure", "precipitation", "cloud_cover", "relative_humidity_2m",
     ]
-    payload, error = _fetch_hourly_api(
-        "https://api.open-meteo.com/v1/forecast",
-        variables, lat, lon, forecast_days, timeout)
-    if payload is None:
-        if error and "429" in str(error):
+
+    in_cooldown = False
+    with _WEATHER_429_LOCK:
+        if time.monotonic() < _WEATHER_429_UNTIL:
+            in_cooldown = True
+
+    payload = None
+    error = None
+    if not in_cooldown:
+        payload, error = _fetch_hourly_api(
+            "https://api.open-meteo.com/v1/forecast",
+            variables, lat, lon, forecast_days, timeout)
+        if payload is None and error and "429" in str(error):
             with _WEATHER_429_LOCK:
                 _WEATHER_429_UNTIL = time.monotonic() + 120.0
-        # 回退到 7Timer! GFS
-        payload2, err2 = _fetch_7timer_weather(lat, lon, timeout)
-        if payload2 is not None:
-            payload2["source"] = "7Timer! GFS (Open-Meteo 限流回退)"
-            return payload2
-        return {"ok": False, "error": f"Open-Meteo: {error} | 7Timer: {err2}"}
-    hourly = payload.get("hourly") or {}
-    payload["source"] = "Open-Meteo"
-    return {"ok": True, "hourly": hourly,
-            "utc_offset_seconds": payload.get("utc_offset_seconds")}
+
+    if payload is not None:
+        hourly = payload.get("hourly") or {}
+        payload["source"] = "Open-Meteo"
+        return {"ok": True, "hourly": hourly,
+                "utc_offset_seconds": payload.get("utc_offset_seconds")}
+
+    # Open-Meteo 不可用（冷却期 / 429 / 网络故障）→ 7Timer! GFS
+    payload2, err2 = _fetch_7timer_weather(lat, lon, timeout)
+    if payload2 is not None:
+        payload2["source"] = "7Timer! GFS (Open-Meteo 限流回退)"
+        return payload2
+    return {"ok": False,
+            "error": f"Open-Meteo: {error or '冷却中'} | 7Timer: {err2}"}
 
 
 # ---------------------------------------------------------------- 源 3
