@@ -105,10 +105,14 @@ def _fetch_hourly_api(url, variables, lat, lon, forecast_days, timeout):
         "timezone": config.TIMEZONE,
         "forecast_days": forecast_days,
     }
+    headers = {
+        "User-Agent": "OceanTempMonitor/1.0 (https://github.com/yezi520s/ocean-temp-monitor)",
+        "Accept": "application/json",
+    }
     last_error = None
     for attempt in range(config.EXTERNAL_RETRY_ATTEMPTS):
         try:
-            resp = requests.get(url, params=params, timeout=timeout)
+            resp = requests.get(url, params=params, headers=headers, timeout=timeout)
             if resp.status_code in config.EXTERNAL_RETRY_STATUS:
                 last_error = f"{resp.status_code}"
                 if attempt < config.EXTERNAL_RETRY_ATTEMPTS - 1:
