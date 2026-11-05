@@ -161,9 +161,78 @@ def fetch_marine_live(lat, lon, forecast_days=2, timeout=None):
 
 
 # ---------------------------------------------------------------- 源 2
+def _fetch_7timer_weather(lat, lon, timeout):
+    """7Timer! GFS — 免费无密钥天气 API（Open-Meteo 被限时回退）。
+    
+    返回与 Open-Meteo hourly 格式兼容的 {hourly: {time:[...], temp_2m:[...], ...}}
+    3 小时间隔，覆盖 8 天 (64 个 step)。
+    """
+    try:
+        url = f"http://www.7timer.info/bin/api.pl?lon={lon}&lat={lat}&product=civil&output=json"
+        resp = requests.get(url, timeout=timeout)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as exc:
+        return None, f"7Timer: {exc}"
+
+    series = data.get("dataseries") or []
+    if not series:
+        return None, "7Timer: 无数据"
+
+    init_str = data.get("init", "")
+    if len(init_str) >= 10:
+        try:
+            base = datetime(int(init_str[:4]), int(init_str[4:6]), int(init_str[6:8]),
+                            int(init_str[8:10]), tzinfo=timezone.utc)
+        except (ValueError, TypeError):
+            base = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    else:
+        base = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+
+    times, temps, wind_s, wind_d, press, precip, cloud, rh = [], [], [], [], [], [], [], []
+    for row in series:
+        step_h = row.get("timepoint", 0)
+        t = base + timedelta(hours=step_h)
+        times.append(t.isoformat())
+        temps.append(row.get("temp2m"))
+        w10 = row.get("wind10m") or {}
+        ws = w10.get("speed")
+        if ws == -9999:
+            ws = None
+        wind_s.append(ws)
+        wd = w10.get("direction", "")
+        try:
+            wind_d.append(float(wd))
+        except (ValueError, TypeError):
+            wind_d.append(None)
+        press.append(row.get("msl_pressure"))
+        # 降水：prec_type="rain" 时有 prec_amount (mm)，否则为 0
+        pt = row.get("prec_type", "")
+        pa = row.get("prec_amount", 0)
+        precip.append(pa if pt == "rain" else 0)
+        cc = row.get("cloudcover")
+        cloud.append(None if cc is None or cc == -9999 else cc)
+        r = row.get("rh2m", "")
+        try:
+            rh_val = None if r == "" or r == "-9999" else float(str(r).replace("%", ""))
+        except (ValueError, TypeError):
+            rh_val = None
+        rh.append(rh_val)
+
+    return {"ok": True, "hourly": {
+        "time": times,
+        "temperature_2m": temps,
+        "wind_speed_10m": wind_s,
+        "wind_direction_10m": wind_d,
+        "surface_pressure": press,
+        "precipitation": precip,
+        "cloud_cover": cloud,
+        "relative_humidity_2m": rh,
+    }, "utc_offset_seconds": 8 * 3600}, None
+
+
 def fetch_weather_live(lat, lon, forecast_days=2, timeout=None):
-    """Open-Meteo Weather API —— 风 / 气温 / 气压 / 降水 / 云量 / 湿度。"""
-    # 全局 429 静默保护：一次限流后 120s 内不重试，避免 8 站串行全部撞限
+    """气象要素 —— 优先 Open-Meteo，被限 429 时回退 7Timer! GFS。"""
     global _WEATHER_429_UNTIL
     with _WEATHER_429_LOCK:
         if time.monotonic() < _WEATHER_429_UNTIL:
@@ -180,8 +249,14 @@ def fetch_weather_live(lat, lon, forecast_days=2, timeout=None):
         if error and "429" in str(error):
             with _WEATHER_429_LOCK:
                 _WEATHER_429_UNTIL = time.monotonic() + 120.0
-        return {"ok": False, "error": error}
+        # 回退到 7Timer! GFS
+        payload2, err2 = _fetch_7timer_weather(lat, lon, timeout)
+        if payload2 is not None:
+            payload2["source"] = "7Timer! GFS (Open-Meteo 限流回退)"
+            return payload2
+        return {"ok": False, "error": f"Open-Meteo: {error} | 7Timer: {err2}"}
     hourly = payload.get("hourly") or {}
+    payload["source"] = "Open-Meteo"
     return {"ok": True, "hourly": hourly,
             "utc_offset_seconds": payload.get("utc_offset_seconds")}
 
