@@ -161,14 +161,32 @@ def fetch_marine_live(lat, lon, forecast_days=2, timeout=None):
 
 
 # ---------------------------------------------------------------- 源 2
+_WIND_DIR = {
+    "N": 0, "NNE": 22.5, "NE": 45, "ENE": 67.5,
+    "E": 90, "ESE": 112.5, "SE": 135, "SSE": 157.5,
+    "S": 180, "SSW": 202.5, "SW": 225, "WSW": 247.5,
+    "W": 270, "WNW": 292.5, "NW": 315, "NNW": 337.5,
+}
+
+
+def _wind_dir_to_deg(v):
+    """风向字符串 → 度数（7Timer civil 产品用文字风向）。"""
+    if v is None:
+        return None
+    try:
+        return float(v)
+    except (ValueError, TypeError):
+        return _WIND_DIR.get(str(v).upper(), None)
+
+
 def _fetch_7timer_weather(lat, lon, timeout):
-    """7Timer! GFS — 免费无密钥天气 API（Open-Meteo 被限时回退）。
+    """7Timer! Astro meteo — 免费无密钥 GFS 天气 API（Open-Meteo 429 回退）。
     
-    返回与 Open-Meteo hourly 格式兼容的 {hourly: {time:[...], temp_2m:[...], ...}}
-    3 小时间隔，覆盖 8 天 (64 个 step)。
+    meteo 产品包含 msl_pressure，风向为数字。
+    返回与 Open-Meteo hourly 格式兼容的字典。
     """
     try:
-        url = f"http://www.7timer.info/bin/api.pl?lon={lon}&lat={lat}&product=civil&output=json"
+        url = f"http://www.7timer.info/bin/api.pl?lon={lon}&lat={lat}&product=meteo&output=json"
         resp = requests.get(url, timeout=timeout)
         resp.raise_for_status()
         data = resp.json()
@@ -197,27 +215,24 @@ def _fetch_7timer_weather(lat, lon, timeout):
         temps.append(row.get("temp2m"))
         w10 = row.get("wind10m") or {}
         ws = w10.get("speed")
-        if ws == -9999:
-            ws = None
-        wind_s.append(ws)
-        wd = w10.get("direction", "")
-        try:
-            wind_d.append(float(wd))
-        except (ValueError, TypeError):
-            wind_d.append(None)
-        press.append(row.get("msl_pressure"))
-        # 降水：prec_type="rain" 时有 prec_amount (mm)，否则为 0
+        wind_s.append(None if ws == -9999 else ws)
+        wd = _wind_dir_to_deg(w10.get("direction"))
+        wind_d.append(wd)
+        mp = row.get("msl_pressure")
+        press.append(None if mp == -9999 else mp)
         pt = row.get("prec_type", "")
         pa = row.get("prec_amount", 0)
         precip.append(pa if pt == "rain" else 0)
         cc = row.get("cloudcover")
         cloud.append(None if cc is None or cc == -9999 else cc)
-        r = row.get("rh2m", "")
+        rh_val = row.get("rh2m")
+        if isinstance(rh_val, str):
+            rh_val = rh_val.replace("%", "")
         try:
-            rh_val = None if r == "" or r == "-9999" else float(str(r).replace("%", ""))
+            rh_val = float(rh_val)
         except (ValueError, TypeError):
             rh_val = None
-        rh.append(rh_val)
+        rh.append(None if rh_val == -9999 else rh_val)
 
     return {"ok": True, "hourly": {
         "time": times,
