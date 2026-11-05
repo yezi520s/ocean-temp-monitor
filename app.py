@@ -803,7 +803,15 @@ def create_app():
         wind_s = stat("wind_speed_10m", "weather")
         wind_d = stat("wind_direction_10m", "weather")
         pressure = stat("surface_pressure", "weather")
-        precip = stat("precipitation", "weather")
+        # 降水需要覆盖已发生时段（当前窗口可能截断今早的雨），用全部可用数据统计
+        precip_vals = hourly_w.get("precipitation") or []
+        precip = {
+            "now": precip_vals[idx] if idx < len(precip_vals) else None,
+            "avg": round(sum(v for v in precip_vals if v is not None) /
+                         max(len([v for v in precip_vals if v is not None]), 1), 2),
+            "max": max(precip_vals) if precip_vals else None,
+            "min": min(precip_vals) if precip_vals else None,
+        }
         cloud = stat("cloud_cover", "weather")
         humidity = stat("relative_humidity_2m", "weather")
 
