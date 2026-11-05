@@ -88,7 +88,7 @@ def _load_external(kind, station_id, lat, lon, fetch_fn):
 
 
 def _now_iso():
-    return datetime.now().isoformat(timespec="seconds")
+    return datetime.now(timezone(timedelta(seconds=config.TIMEZONE_UTC_OFFSET_SECONDS))).isoformat(timespec="seconds")
 
 
 # ---------------------------------------------------------------- 源 1
